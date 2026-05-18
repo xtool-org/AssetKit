@@ -34,6 +34,13 @@ struct BitmapBody: Sendable {
     var pixelsBGRA: [UInt8]
     var colorSpaceID: UInt8
     var kind: Kind
+    /// True iff this bitmap was rasterised from a vector source (SVG, PDF)
+    /// rather than supplied directly as bitmap pixels. The reference actool
+    /// output tags vector-rasterised bitmaps with extra bits in the CSI
+    /// header's `renditionFlags`; some CoreUI runtime paths branch on this
+    /// classification (e.g. when re-rasterising via the preserved vector
+    /// source at a non-intrinsic size). PNG / appicon bitmaps leave it false.
+    var derivedFromVector: Bool = false
     /// The source filename (e.g. "icon@2x.png"). Stored in the CSI header's
     /// 128-char name field; actool uses the filename here, not the asset name.
     var renditionName: String

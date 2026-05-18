@@ -13,6 +13,8 @@ public enum XCAssetCompilerError: Error, Sendable, Equatable {
     case unsupportedAssetType(String)
     case malformedJPEG(reason: String)
     case unsupportedAppIconSource(asset: String, filename: String)
+    case svgDimensionsMissing(asset: String, filename: String)
+    case svgRasterizationFailed(asset: String, filename: String, underlying: String)
 }
 
 extension XCAssetCompilerError: CustomStringConvertible {
@@ -42,6 +44,10 @@ extension XCAssetCompilerError: CustomStringConvertible {
             return "Malformed JPEG: \(reason)"
         case .unsupportedAppIconSource(let asset, let filename):
             return "AppIcon '\(asset)' source file '\(filename)' is not a PNG; only .png is supported for app icons"
+        case .svgDimensionsMissing(let asset, let filename):
+            return "SVG asset '\(asset)' file '\(filename)' has no usable width/height or viewBox; cannot determine intrinsic size"
+        case .svgRasterizationFailed(let asset, let filename, let underlying):
+            return "Failed to rasterise SVG asset '\(asset)' file '\(filename)': \(underlying)"
         }
     }
 }

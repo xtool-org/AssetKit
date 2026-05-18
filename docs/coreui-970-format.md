@@ -144,6 +144,17 @@ A 12-byte framing wrapper at the start of the rendition body:
 
 The same envelope serves both formats; the inner compression mode is chosen per source.
 
+### SVG renditions emitted per asset
+
+A single `.svg` source in an imageset produces **four** renditions in the compiled CAR:
+
+1. **One preserved-source vector rendition** (layout=9; see below)
+2. **Three rasterised bitmap renditions** at 1x / 2x / 3x
+
+iOS's `UIImage(named:)` resolves SVG-sourced assets through the rasterised bitmap fallbacks, not the vector rendition. Empirically, shipping iOS looks up by `(scale, part=181)` and ignores the vector source; the vector rendition is still emitted because other CoreUI consumers (and future iOS versions) may prefer it, and the marginal cost is small (one DWAR-wrapped LZFSE-compressed copy of the XML, typically a few hundred bytes for icon SVGs).
+
+The three bitmap renditions are produced by an injected `SVGRasterizer` (default: `rsvg-convert` subprocess). Pixel dimensions for each scale are `intrinsicWidth * scale × intrinsicHeight * scale`, where the intrinsic dimensions come from the SVG's `width` / `height` attributes or its `viewBox`. The resulting BGRA bitmaps go through the regular bitmap CSI writer with `pixelFormat='ARGB'` and `layout=12` — identical in shape to PNG-sourced bitmaps.
+
 ### SVG vector rendition
 
 | CSI field | Value |

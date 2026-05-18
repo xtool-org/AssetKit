@@ -13,6 +13,11 @@ Targets CoreUI 970 (Xcode 26 / iOS 16+). See [docs/coreui-970-format.md](docs/co
 ```swift
 import XCAssetCompiler
 
+// `svgRasterizer` defaults to `RsvgConvertRasterizer()`, which shells out
+// to `rsvg-convert` (install with `apt install librsvg2-tools`,
+// `dnf install librsvg2-tools`, or `brew install librsvg`). Replace it
+// with your own `SVGRasterizer` if you'd rather not depend on a system
+// binary.
 let compiler = XCAssetCompiler(deploymentTarget: "16.0")
 let result = try await compiler.compile(catalog: catalogURL)
 
@@ -29,7 +34,7 @@ if let bundle = result.appIconBundle {
 
 - `.imageset`
   - PNG sources (1x/2x/3x scales, sRGB and display-P3, dark/light appearances)
-  - SVG sources stored as preserved vector renditions (XML kept verbatim, LZFSE-compressed inside a DWAR envelope; iOS renders crisp at any scale)
+  - SVG sources, each emitted as one preserved vector rendition (XML kept verbatim, LZFSE-compressed inside a DWAR envelope) plus three rasterised bitmap fallbacks at 1x/2x/3x (because `UIImage(named:)` reads the rasterised fallbacks; the vector rendition is what other CoreUI consumers and future iOS versions may prefer). Rasterisation is delegated to an injectable `SVGRasterizer`; the default shells out to `rsvg-convert`.
   - JPG sources stored as preserved raw renditions (JPEG bytes passed through; original compression preserved)
 - `.colorset` (sRGB and display-P3, hex or float components, dark/light appearances)
 - `.appiconset` (per-idiom and per-size, with the loose-PNG fallback that SpringBoard expects alongside `Assets.car`). PNG sources only; SVG/JPG are rejected because SpringBoard's icon-render pipeline requires PNG.

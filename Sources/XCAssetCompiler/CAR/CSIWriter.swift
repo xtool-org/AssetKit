@@ -44,11 +44,22 @@ enum CSIWriter {
     static func bitmap(name: String, body: BitmapBody, scaleFactor: UInt32) -> Data {
         let tvl = bitmapTVL(width: body.width, height: body.height)
         let payload = bitmapBody(width: body.width, height: body.height, pixels: body.pixelsBGRA)
-        // actool sets bit 4 of renditionFlags for `.image` (generic) bitmaps
-        // and leaves it cleared for `.appIcon`. We mirror this; the bit is
-        // structural and on-device UIImage(named:) resolution does work
-        // through the LZFSE+KCBC path verified end-to-end.
-        let renditionFlags: UInt32 = (body.kind == .image) ? 0x10 : 0x00
+        // Bit 4 (0x10): generic-image category; set for `.image`, cleared
+        // for `.appIcon`. Matches what UIImage(named:) walks for imageset
+        // resolution.
+        //
+        // Bits 2 and 8 (0x104): set when this bitmap was rasterised from a
+        // vector source (SVG / PDF). Matches actool's reference output for
+        // SVG-rasterised bitmaps (flags=0x114 vs flags=0x10 for native PNG).
+        // Bit 2 (0x04) is also set on the standalone vector source rendition
+        // emitted from `preservedSource(.svg)`; the pair (0x04, 0x100)
+        // together appears to mark "rendition is a raster derived from a
+        // vector source", letting CoreUI's runtime branch into the
+        // re-rasterise-from-vector path at non-intrinsic sizes.
+        var renditionFlags: UInt32 = (body.kind == .image) ? 0x10 : 0x00
+        if body.derivedFromVector {
+            renditionFlags |= 0x104
+        }
         var w = ByteWriter()
         writeHeader(
             into: &w,

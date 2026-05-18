@@ -62,9 +62,18 @@ public struct LooseFile: Sendable {
 
 public struct XCAssetCompiler: Sendable {
     public var deploymentTarget: String
+    /// Strategy used to rasterise `.svg` sources to PNG bytes. Defaults to
+    /// `RsvgConvertRasterizer`, which shells out to `rsvg-convert`. Replace
+    /// when you need a different rasteriser (no PATH dep, different
+    /// performance profile, sandbox restrictions, etc).
+    public var svgRasterizer: any SVGRasterizer
 
-    public init(deploymentTarget: String) {
+    public init(
+        deploymentTarget: String,
+        svgRasterizer: any SVGRasterizer = RsvgConvertRasterizer()
+    ) {
         self.deploymentTarget = deploymentTarget
+        self.svgRasterizer = svgRasterizer
     }
 
     public func compile(catalog catalogURL: URL) async throws -> CompileResult {
@@ -74,7 +83,10 @@ public struct XCAssetCompiler: Sendable {
         var renditions: [Rendition] = []
 
         for imageSet in loaded.imageSets {
-            renditions.append(contentsOf: try ImageRenderer.renditions(for: imageSet))
+            renditions.append(contentsOf: try ImageRenderer.renditions(
+                for: imageSet,
+                svgRasterizer: svgRasterizer
+            ))
         }
         for colorSet in loaded.colorSets {
             renditions.append(contentsOf: try ColorRenderer.renditions(for: colorSet))

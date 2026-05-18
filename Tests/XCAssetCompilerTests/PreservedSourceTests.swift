@@ -67,7 +67,11 @@ struct PreservedSourceTests {
             Issue.record("Fixtures/Test.xcassets missing from test bundle")
             return
         }
-        let compiler = XCAssetCompiler(deploymentTarget: "16.0")
+        // Inject the stub rasteriser so this test passes on hosts without
+        // rsvg-convert installed. The DWAR/JPG checks below don't depend on
+        // pixel content, only on the preserved-source envelope appearing in
+        // the compiled CAR.
+        let compiler = XCAssetCompiler(deploymentTarget: "16.0", svgRasterizer: StubSVGRasterizer())
         let result = try await compiler.compile(catalog: fixtureURL)
         let bytes = [UInt8](result.carData)
         // The encoded DWAR envelopes from our two fixtures must appear
