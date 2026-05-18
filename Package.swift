@@ -19,15 +19,23 @@ let package = Package(
     ],
     targets: [
         .target(
+            name: "CLZFSE",
+            path: "Sources/CLZFSE",
+            exclude: ["LICENSE", "UPSTREAM.md"],
+            publicHeadersPath: "include"
+        ),
+        .target(
             name: "XCAssetCompiler",
             dependencies: [
                 .product(name: "PNG", package: "swift-png"),
+                "CLZFSE",
             ]
         ),
         .testTarget(
             name: "XCAssetCompilerTests",
             dependencies: [
                 "XCAssetCompiler",
+                "CLZFSE",
             ],
             resources: [
                 .copy("Fixtures"),

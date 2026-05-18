@@ -1,7 +1,5 @@
 import Foundation
-#if canImport(Compression)
-import Compression
-#endif
+import CLZFSE
 
 /// CSI ("CTSI") rendition header is 184 bytes little-endian, followed by an
 /// optional TVL section (currently unused, tvlLength=0) and then the body.
@@ -189,16 +187,6 @@ enum CSIWriter {
         // divides evenly by 3; otherwise we fall back to a single chunk
         // covering the whole image. The 3-chunk split is mimicry rather than
         // a correctness requirement: CoreUI accepts both layouts.
-        //
-        // The MLEC wrapper always advertises compressionType=3 (LZFSE) and
-        // each chunk payload is a valid LZFSE stream. On macOS we let
-        // Apple's Compression framework actually compress. On Linux we emit
-        // a single LZFSE "uncompressed block" envelope (`bvx-` + size +
-        // raw bytes + `bvx$` end-of-stream); CoreUI's LZFSE decoder reads
-        // this as a passthrough and ends up with the raw pixels intact.
-        // Size cost on Linux: roughly the raw bitmap size + 12 bytes per
-        // chunk. Avoiding the alternative (compressionType=0 raw, which
-        // CoreUI's runtime quietly fails to materialise) is worth it.
         let bytesPerRow = Int(width) * 4
         let canChunkInThree = height % 3 == 0
         let chunkCount: UInt32 = canChunkInThree ? 3 : 1
@@ -228,52 +216,31 @@ enum CSIWriter {
         return w.data
     }
 
-    /// Produce a valid LZFSE stream from `input`.
-    ///
-    /// On macOS, uses Apple's Compression framework for actual LZFSE
-    /// compression. On Linux, where `Compression` is not part of the Swift
-    /// SDK (it's a Darwin-only system framework, closed source, not
-    /// redistributed), hand-emits the LZFSE "uncompressed block" envelope.
-    /// CoreUI's LZFSE decoder reads it as a passthrough and ends up with
-    /// the raw pixels intact -- verified rendering on a real iOS device
-    /// from a Linux-built `Assets.car`.
-    ///
-    /// LZFSE uncompressed block layout (from lzfse_internal.h):
-    ///
-    ///   magic        u32  ('bvx-' = LZFSE_UNCOMPRESSED_BLOCK_MAGIC)
-    ///   n_raw_bytes  u32  (size of the raw payload that follows)
-    ///   payload      raw bytes
-    ///   end magic    u32  ('bvx$' = LZFSE_ENDOFSTREAM_BLOCK_MAGIC)
-    ///
-    /// **Future option:** vendor an LZFSE implementation so Linux gets
-    /// real compression instead of passthrough. That would close the
-    /// bundle-size gap and remove our dependency on CoreUI continuing to
-    /// accept the uncompressed-block path. It is purely an optimisation;
-    /// the passthrough is structurally valid LZFSE per Apple's own spec.
-    private static func lzfseEncode(_ input: [UInt8]) -> [UInt8] {
-        #if canImport(Compression)
+    /// Produce a valid LZFSE stream from `input` via the vendored encoder.
+    /// See `Sources/CLZFSE/UPSTREAM.md`.
+    static func lzfseEncode(_ input: [UInt8]) -> [UInt8] {
+        // Upstream `lzfse_encode_buffer` writes the worst-case-bounded output
+        // (raw passthrough is the worst case) into `dst`, returning the
+        // written length or 0 on failure. Scratch=nil lets the encoder malloc
+        // its own scratch per call.
+        //
+        // Worst case is upstream's uncompressed-block fallback (`bvx-` +
+        // n_raw_bytes + payload + `bvx$`, 12 bytes of envelope). The +256
+        // slack is generous insurance against any constant-size framing the
+        // encoder might add ahead of choosing the fallback path.
         let bound = input.count + 256
         var output = [UInt8](repeating: 0, count: bound)
         let encoded = input.withUnsafeBufferPointer { inBuf -> Int in
             output.withUnsafeMutableBufferPointer { outBuf in
-                compression_encode_buffer(
+                lzfse_encode_buffer(
                     outBuf.baseAddress!, bound,
                     inBuf.baseAddress!, input.count,
-                    nil,
-                    COMPRESSION_LZFSE
+                    nil
                 )
             }
         }
         precondition(encoded > 0, "LZFSE encoding failed for \(input.count)-byte buffer")
         return Array(output.prefix(encoded))
-        #else
-        var w = ByteWriter()
-        w.writeFourCC("bvx-")                   // uncompressed block magic
-        w.writeLE(UInt32(input.count))          // n_raw_bytes
-        w.write(input)                          // raw payload
-        w.writeFourCC("bvx$")                   // end-of-stream magic
-        return Array(w.data)
-        #endif
     }
 
     private static func colorBody(body: ColorBody) -> Data {

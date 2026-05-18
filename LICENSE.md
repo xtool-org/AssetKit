@@ -19,3 +19,12 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+## Third-party code
+
+This repository vendors Apple's LZFSE reference implementation under
+`Sources/CLZFSE/`, distributed under the BSD 3-Clause License. The original
+license text and provenance are recorded at `Sources/CLZFSE/LICENSE` and
+`Sources/CLZFSE/UPSTREAM.md`.

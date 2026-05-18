@@ -39,12 +39,11 @@ if let bundle = result.appIconBundle {
 
 These can be added; the format mechanisms in `Sources/XCAssetCompiler/CAR/` are general enough.
 
-## Linux vs macOS
+## Compression
 
-The library is fully functional on both. The one difference is bitmap compression:
-
-- On macOS the writer uses Apple's `Compression` framework for real LZFSE compression of bitmap renditions.
-- On Linux (where `Compression` is Darwin-only) the writer emits LZFSE "uncompressed block" envelopes (`bvx-` / `bvx$`) carrying raw pixels. CoreUI's LZFSE decoder reads these as passthrough; output renders correctly on a real iOS device. The cost is bundle size: roughly `raw_bitmap_size + 12 bytes per chunk` per rendition.
+Bitmap renditions are compressed with LZFSE on every platform via a vendored
+copy of Apple's reference encoder (`Sources/CLZFSE/`, BSD 3-Clause). CAR
+output is byte-deterministic across Linux and macOS.
 
 ## Tests
 
