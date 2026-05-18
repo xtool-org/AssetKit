@@ -90,4 +90,58 @@ enum BitmapKeys {
             )
         }
     }
+
+    /// Derive the BITMAPKEYS descriptor for one asset from its rendition list.
+    /// Returns `nil` for color-only assets, which produce no BITMAPKEYS row.
+    ///
+    /// `renditions` is the per-asset slice -- only the renditions whose
+    /// `name` equals this asset's name. Caller is responsible for the
+    /// grouping; this function does not re-filter.
+    static func descriptor(forAsset name: String, renditions: [Rendition]) -> Descriptor? {
+        let hasBitmapOrPreservedSource = renditions.contains { rendition in
+            switch rendition.body {
+            case .bitmap, .preservedSource: return true
+            case .color: return false
+            }
+        }
+        guard hasBitmapOrPreservedSource else { return nil }
+
+        let kind = inferKind(from: renditions)
+
+        // (idiom << 16) | subtype packs each (idiom, subtype) pair into a
+        // single UInt32 for Set uniqueness. Subtype is always 0 today; the
+        // packing exists to match how CoreUI would distinguish (e.g.) iPhone
+        // 60pt vs iPhone 76pt if subtype were ever non-zero.
+        let idiomSubtypes = Set(renditions.map { rendition -> UInt32 in
+            let idiom = UInt32(rendition.idiom.rawValueByte)
+            let subtype: UInt32 = 0
+            return (idiom << 16) | subtype
+        })
+
+        return Descriptor(kind: kind, idiomSubtypeCount: UInt32(idiomSubtypes.count))
+    }
+
+    /// AppIcon takes precedence over Vector takes precedence over Image:
+    /// an .appiconset is a distinct CoreUI category, and a vector source
+    /// outranks plain bitmap because the rasterised PNG fallbacks coexist
+    /// with the preserved SVG body. Mixed PNG/JPEG imagesets fall through
+    /// to `.image`.
+    ///
+    /// The AppIcon arm relies on `ImageRenderer.appIconRenditions` only
+    /// producing `.bitmap(.appIcon)` renditions (PNG-only at that entry
+    /// point). If that invariant slips, an appiconset whose source was
+    /// (say) preserved JPG would be misclassified as `.image` here.
+    private static func inferKind(from renditions: [Rendition]) -> Descriptor.Kind {
+        for rendition in renditions {
+            if case .bitmap(let body) = rendition.body, body.kind == .appIcon {
+                return .appIcon
+            }
+        }
+        for rendition in renditions {
+            if case .preservedSource(let body) = rendition.body, case .svg = body.format {
+                return .vector
+            }
+        }
+        return .image
+    }
 }

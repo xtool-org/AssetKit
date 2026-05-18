@@ -51,7 +51,7 @@ struct LZFSECrossOracleTests {
     }
 
     private func crossDecode(_ input: [UInt8], sourceLocation: SourceLocation = #_sourceLocation) {
-        let encoded = CSIWriter.lzfseEncode(input)
+        let encoded = LZFSE.encode(input)
 
         let decodeBound = max(input.count, 1)
         var decoded = [UInt8](repeating: 0, count: decodeBound)

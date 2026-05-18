@@ -73,7 +73,7 @@ struct LZFSEEncodeTests {
     /// Encode `input` with our vendored encoder, decode with the vendored
     /// decoder, assert byte-equal.
     private func roundtrip(_ input: [UInt8], sourceLocation: SourceLocation = #_sourceLocation) {
-        let encoded = CSIWriter.lzfseEncode(input)
+        let encoded = LZFSE.encode(input)
 
         // `max(_, 1)` because withUnsafeMutableBufferPointer on a zero-length
         // [UInt8] hands back a nil baseAddress; one slack byte avoids the

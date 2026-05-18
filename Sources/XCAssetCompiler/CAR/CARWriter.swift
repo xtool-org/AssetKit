@@ -1,149 +1,97 @@
 import Foundation
 
 /// Orchestrates the BOM container and CAR-specific blocks/trees.
+///
+/// Canonical vars-table order is established by call sequence: each
+/// `addBlock` is immediately paired with `setVariable`, and `BOMWriter`
+/// emits the vars table in insertion order. CoreUI's `UIImage(named:)`
+/// lookup walks the vars table in order and rejects catalogs whose
+/// ordering doesn't match the reference shape, so adding a new block out
+/// of sequence here would break iOS lookups silently.
 struct CARWriter: Sendable {
     var deploymentTarget: String
     var renditions: [Rendition]
 
     func write() throws -> Data {
+        let layout = CARLayout(renditions: renditions)
         var bom = BOMWriter()
 
-        // Build all blocks first; defer setVariable calls until the end so
-        // we can emit the BOM vars table in the canonical order CoreUI
-        // expects. (Empirically iOS's UIImage(named:) lookup walks the vars
-        // table in order and rejects catalogs whose ordering doesn't match
-        // the reference shape: CARHEADER, RENDITIONS, FACETKEYS,
-        // APPEARANCEKEYS, KEYFORMAT, EXTENDED_METADATA, BITMAPKEYS.)
+        // Canonical vars-table order, established by the call sequence
+        // below: CARHEADER, RENDITIONS, FACETKEYS, APPEARANCEKEYS,
+        // KEYFORMAT, EXTENDED_METADATA, BITMAPKEYS. Reordering or omitting
+        // a `setVariable` here breaks iOS lookups silently.
 
-        let kindForName: [String: FacetKeys.Kind] = renditions.reduce(into: [:]) { acc, rendition in
-            let kind: FacetKeys.Kind = {
-                switch rendition.body {
-                case .bitmap(let body):
-                    switch body.kind {
-                    case .appIcon: return .appIcon
-                    case .image: return .image
-                    }
-                case .color: return .color
-                // Preserved-source renditions live in the `.image` category at
-                // every layer above the CSI body: FACETKEYS, BITMAPKEYS, and
-                // the rendition key all reuse the same element/part as a
-                // generic PNG imageset. The source format only shows up in
-                // the CSI header's pixelFormat.
-                case .preservedSource: return .image
-                }
-            }()
-            acc[rendition.name] = kind
-        }
+        let headerBlockID = bom.addBlock(CARHeaderBlock.data(renditionCount: UInt32(renditions.count)))
+        bom.setVariable("CARHEADER", blockID: headerBlockID)
 
-        // CARHEADER block
-        let header = CARHeaderBlock.data(renditionCount: UInt32(renditions.count))
-        let headerBlockID = bom.addBlock(header)
-
-        // RENDITIONS tree (packed key tuple -> CSI bytes)
         let renditionEntries: [BOMTree.Entry] = renditions.map { rendition in
-            let key = RenditionKey(rendition: rendition).encode()
-            let value: Data
-            switch rendition.body {
-            case .bitmap(let body):
-                let scaleFactor = UInt32(rendition.scale?.factor ?? 1) * 100
-                value = CSIWriter.bitmap(name: rendition.name, body: body, scaleFactor: scaleFactor)
-            case .color(let body):
-                value = CSIWriter.color(name: rendition.name, body: body)
-            case .preservedSource(let body):
-                // SVG renditions are scale-free; the reference leaves
-                // scaleFactor=0 for them. JPGs respect the @Nx suffix the
-                // same way PNGs do.
-                let scaleFactor: UInt32 = {
-                    switch body.format {
-                    case .svg: return 0
-                    case .jpeg: return UInt32(rendition.scale?.factor ?? 1) * 100
-                    }
-                }()
-                value = CSIWriter.preservedSource(body: body, scaleFactor: scaleFactor)
-            }
-            return BOMTree.Entry(key: key, value: value)
+            BOMTree.Entry(
+                key: RenditionKey(rendition: rendition).encode(),
+                value: csiData(for: rendition)
+            )
         }
         let renditionsTreeID = BOMTree.insert(into: &bom, entries: renditionEntries)
+        bom.setVariable("RENDITIONS", blockID: renditionsTreeID)
 
-        // FACETKEYS tree (asset name -> attribute pairs)
-        let facetEntries = kindForName.keys.sorted().map { name in
+        let facetEntries = layout.assets.map { asset in
             BOMTree.Entry(
-                key: Data(name.utf8),
-                value: FacetKeys.value(for: name, kind: kindForName[name]!)
+                key: Data(asset.name.utf8),
+                value: FacetKeys.value(for: asset.name, kind: asset.kind)
             )
         }
         let facetTreeID = BOMTree.insert(into: &bom, entries: facetEntries)
+        bom.setVariable("FACETKEYS", blockID: facetTreeID)
 
-        // APPEARANCEKEYS tree -- only emit rows the catalog actually uses.
-        var usedAppearances: Set<UInt16> = [AppearanceKeys.any]
-        for rendition in renditions where rendition.appearance?.darkLuminosity == true {
-            usedAppearances.insert(AppearanceKeys.dark)
-        }
         let appearanceTreeID = BOMTree.insert(
             into: &bom,
-            entries: AppearanceKeys.entries(used: usedAppearances)
+            entries: AppearanceKeys.entries(used: layout.usedAppearances)
         )
-
-        // KEYFORMAT block
-        let kfmt = KeyFormatBlock.data()
-        let kfmtBlockID = bom.addBlock(kfmt)
-
-        // EXTENDED_METADATA block
-        let extendedMetadata = ExtendedMetadata.data(deploymentTarget: deploymentTarget)
-        let extendedMetadataBlockID = bom.addBlock(extendedMetadata)
-
-        // BITMAPKEYS tree -- per-asset bitmap descriptors keyed by
-        // inline NameIdentifier. Required for UIImage(named:) lookup of
-        // generic `.imageset` assets at runtime.
-        let bitmapAssets: [(name: String, descriptor: BitmapKeys.Descriptor)] =
-            kindForName.keys.sorted().compactMap { name -> (String, BitmapKeys.Descriptor)? in
-                guard let kind = kindForName[name] else { return nil }
-                if case .color = kind { return nil }
-                let renditionsForName = renditions.filter { $0.name == name }
-                let idiomSubtypes = Set(renditionsForName.map { rendition -> UInt32 in
-                    let idiom = UInt32(rendition.idiom.rawValueByte)
-                    let subtype: UInt32 = 0
-                    return (idiom << 16) | subtype
-                })
-                // An asset is a vector source iff any of its renditions is
-                // a preserved SVG. JPG / PNG / mixed PNG-only fall through
-                // to `.image`. AppIcon stays appicon.
-                let isVectorSource = renditionsForName.contains { rendition in
-                    if case .preservedSource(let body) = rendition.body,
-                       case .svg = body.format {
-                        return true
-                    }
-                    return false
-                }
-                let descKind: BitmapKeys.Descriptor.Kind = {
-                    switch kind {
-                    case .appIcon: return .appIcon
-                    case .image: return isVectorSource ? .vector : .image
-                    case .color: return .image
-                    }
-                }()
-                return (name, BitmapKeys.Descriptor(
-                    kind: descKind,
-                    idiomSubtypeCount: UInt32(idiomSubtypes.count)
-                ))
-            }
-        let bitmapKeysTreeID: UInt32? = bitmapAssets.isEmpty ? nil : BOMTree.insertInlineKey(
-            into: &bom,
-            entries: BitmapKeys.entries(for: bitmapAssets),
-            blockSize: 1024
-        )
-
-        // Canonical vars table order. Matches actool's reference output.
-        bom.setVariable("CARHEADER", blockID: headerBlockID)
-        bom.setVariable("RENDITIONS", blockID: renditionsTreeID)
-        bom.setVariable("FACETKEYS", blockID: facetTreeID)
         bom.setVariable("APPEARANCEKEYS", blockID: appearanceTreeID)
+
+        let kfmtBlockID = bom.addBlock(KeyFormatBlock.data())
         bom.setVariable("KEYFORMAT", blockID: kfmtBlockID)
+
+        let extendedMetadataBlockID = bom.addBlock(ExtendedMetadata.data(deploymentTarget: deploymentTarget))
         bom.setVariable("EXTENDED_METADATA", blockID: extendedMetadataBlockID)
-        if let bitmapKeysTreeID {
+
+        let bitmapAssets: [(name: String, descriptor: BitmapKeys.Descriptor)] =
+            layout.assets.compactMap { asset in
+                guard let descriptor = BitmapKeys.descriptor(
+                    forAsset: asset.name,
+                    renditions: asset.renditions
+                ) else { return nil }
+                return (asset.name, descriptor)
+            }
+        if !bitmapAssets.isEmpty {
+            let bitmapKeysTreeID = BOMTree.insertInlineKey(
+                into: &bom,
+                entries: BitmapKeys.entries(for: bitmapAssets),
+                blockSize: 1024
+            )
             bom.setVariable("BITMAPKEYS", blockID: bitmapKeysTreeID)
         }
 
         return bom.finalize()
+    }
+
+    private func csiData(for rendition: Rendition) -> Data {
+        switch rendition.body {
+        case .bitmap(let body):
+            let scaleFactor = UInt32(rendition.scale?.factor ?? 1) * 100
+            return CSIWriter.bitmap(name: rendition.name, body: body, scaleFactor: scaleFactor)
+        case .color(let body):
+            return CSIWriter.color(name: rendition.name, body: body)
+        case .preservedSource(let body):
+            // SVG renditions are scale-free; the reference leaves
+            // scaleFactor=0 for them. JPGs respect the @Nx suffix the same
+            // way PNGs do.
+            let scaleFactor: UInt32 = {
+                switch body.format {
+                case .svg: return 0
+                case .jpeg: return UInt32(rendition.scale?.factor ?? 1) * 100
+                }
+            }()
+            return CSIWriter.preservedSource(body: body, scaleFactor: scaleFactor)
+        }
     }
 }

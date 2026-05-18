@@ -29,7 +29,7 @@ struct PreservedSourceTests {
     @Test("JPG preserved-source rendition matches the reference byte-for-byte")
     func jpgMatchesReference() throws {
         let sourceData = try loadFixture("Jpg.imageset/Jpg@2x.jpg")
-        let dims = try JPEGDimensions.read(sourceData)
+        let dims = try JPEGSource.Dimensions.read(sourceData)
         #expect(dims.width == 120, "fixture JPEG width should be 120")
         #expect(dims.height == 120, "fixture JPEG height should be 120")
         let body = PreservedSourceBody(
@@ -45,7 +45,7 @@ struct PreservedSourceTests {
     @Test("DWAR envelope framing is 12 bytes plus payload")
     func dwarEnvelopeFraming() {
         let payload: [UInt8] = [0xAA, 0xBB, 0xCC]
-        let envelope = CSIWriter.dwarEnvelope(flags: 0, payload: payload)
+        let envelope = DWAREnvelope.encode(flags: 0, payload: payload)
         let bytes = [UInt8](envelope)
         #expect(bytes.count == 12 + payload.count)
         #expect(Array(bytes.prefix(4)) == Array("DWAR".utf8))
