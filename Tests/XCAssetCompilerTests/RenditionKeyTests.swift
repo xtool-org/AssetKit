@@ -79,6 +79,55 @@ struct RenditionKeyTests {
         #expect(BOMTree.byteCompare(appAny, appDark) < 0)
     }
 
+    @Test("Preserved-source SVG rendition keys land at part=42, scale=1 (matches reference)")
+    func preservedSourceSVGKey() {
+        let rendition = Rendition(
+            name: "Svg",
+            idiom: .universal,
+            scale: .x1,
+            appearance: nil,
+            gamut: nil,
+            body: .preservedSource(PreservedSourceBody(
+                format: .svg,
+                sourceData: Data("<svg/>".utf8),
+                renditionName: "Svg.svg"
+            ))
+        )
+        let key = RenditionKey(rendition: rendition)
+        // Reference Assets.car: SVG vector source rendition sits under
+        // (scale=1, element=85, part=42). Drifting either value here orphans
+        // the rendition from CoreUI's lookup tree — silently, because the
+        // CSI bytes still parse cleanly.
+        #expect(key.scale == 1)
+        #expect(key.element == 85)
+        #expect(key.part == 42)
+        #expect(key.dimension2 == 0)
+    }
+
+    @Test("Preserved-source JPG rendition keys land at part=181, scale matches @Nx (matches reference)")
+    func preservedSourceJPGKey() {
+        let rendition = Rendition(
+            name: "Jpg",
+            idiom: .universal,
+            scale: .x2,
+            appearance: nil,
+            gamut: nil,
+            body: .preservedSource(PreservedSourceBody(
+                format: .jpeg(width: 120, height: 120),
+                sourceData: Data([0xFF, 0xD8]),
+                renditionName: "Jpg@2x.jpg"
+            ))
+        )
+        let key = RenditionKey(rendition: rendition)
+        // Reference Assets.car: JPG renditions share the generic-image
+        // category with PNGs — same element/part as a PNG imageset entry.
+        // Only the CSI body encoding differs.
+        #expect(key.scale == 2)
+        #expect(key.element == 85)
+        #expect(key.part == 181)
+        #expect(key.dimension2 == 0)
+    }
+
     @Test("nameHash is stable across calls for the same name")
     func nameHashStable() {
         // CoreUI only requires the identifier to match across our own FACETKEYS

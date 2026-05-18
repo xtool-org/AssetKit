@@ -31,6 +31,11 @@ struct RenditionKey: Hashable, Sendable {
         case appIcon = 220
         /// Used by UIImage(named:) for generic `.imageset` assets.
         case image = 181
+        /// Slot for preserved-source vector renditions (SVG). Reference
+        /// `actool` output places the SVG source rendition under this part
+        /// rather than `image`; bitmap variants rasterised from the SVG
+        /// (which `UIImage(named:)` actually returns) live under `image`.
+        case vectorSource = 42
     }
 
     init(rendition: Rendition) {
@@ -59,6 +64,21 @@ struct RenditionKey: Hashable, Sendable {
             self.element = 0
             self.part = 0
             self.dimension2 = 0
+        case .preservedSource(let body):
+            self.element = Element.bitmap.rawValue
+            self.dimension2 = 0
+            switch body.format {
+            case .svg:
+                // SVG source renditions occupy the dedicated vector-source
+                // part; bitmap variants rasterised from the SVG (when the
+                // compiler emits them) would use Part.image instead.
+                self.part = Part.vectorSource.rawValue
+            case .jpeg:
+                // JPEG sits in the generic-image lookup category — CoreUI
+                // decodes the JPG body itself at runtime and returns the
+                // resulting bitmap from UIImage(named:).
+                self.part = Part.image.rawValue
+            }
         }
     }
 

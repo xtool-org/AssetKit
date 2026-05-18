@@ -24,6 +24,12 @@ struct CARWriter: Sendable {
                     case .image: return .image
                     }
                 case .color: return .color
+                // Preserved-source renditions live in the `.image` category at
+                // every layer above the CSI body: FACETKEYS, BITMAPKEYS, and
+                // the rendition key all reuse the same element/part as a
+                // generic PNG imageset. The source format only shows up in
+                // the CSI header's pixelFormat.
+                case .preservedSource: return .image
                 }
             }()
             acc[rendition.name] = kind
@@ -43,6 +49,17 @@ struct CARWriter: Sendable {
                 value = CSIWriter.bitmap(name: rendition.name, body: body, scaleFactor: scaleFactor)
             case .color(let body):
                 value = CSIWriter.color(name: rendition.name, body: body)
+            case .preservedSource(let body):
+                // SVG renditions are scale-free; the reference leaves
+                // scaleFactor=0 for them. JPGs respect the @Nx suffix the
+                // same way PNGs do.
+                let scaleFactor: UInt32 = {
+                    switch body.format {
+                    case .svg: return 0
+                    case .jpeg: return UInt32(rendition.scale?.factor ?? 1) * 100
+                    }
+                }()
+                value = CSIWriter.preservedSource(body: body, scaleFactor: scaleFactor)
             }
             return BOMTree.Entry(key: key, value: value)
         }
@@ -57,8 +74,15 @@ struct CARWriter: Sendable {
         }
         let facetTreeID = BOMTree.insert(into: &bom, entries: facetEntries)
 
-        // APPEARANCEKEYS tree
-        let appearanceTreeID = BOMTree.insert(into: &bom, entries: AppearanceKeys.entries())
+        // APPEARANCEKEYS tree -- only emit rows the catalog actually uses.
+        var usedAppearances: Set<UInt16> = [AppearanceKeys.any]
+        for rendition in renditions where rendition.appearance?.darkLuminosity == true {
+            usedAppearances.insert(AppearanceKeys.dark)
+        }
+        let appearanceTreeID = BOMTree.insert(
+            into: &bom,
+            entries: AppearanceKeys.entries(used: usedAppearances)
+        )
 
         // KEYFORMAT block
         let kfmt = KeyFormatBlock.data()
@@ -81,10 +105,20 @@ struct CARWriter: Sendable {
                     let subtype: UInt32 = 0
                     return (idiom << 16) | subtype
                 })
+                // An asset is a vector source iff any of its renditions is
+                // a preserved SVG. JPG / PNG / mixed PNG-only fall through
+                // to `.image`. AppIcon stays appicon.
+                let isVectorSource = renditionsForName.contains { rendition in
+                    if case .preservedSource(let body) = rendition.body,
+                       case .svg = body.format {
+                        return true
+                    }
+                    return false
+                }
                 let descKind: BitmapKeys.Descriptor.Kind = {
                     switch kind {
                     case .appIcon: return .appIcon
-                    case .image: return .image
+                    case .image: return isVectorSource ? .vector : .image
                     case .color: return .image
                     }
                 }()

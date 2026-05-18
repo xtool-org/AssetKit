@@ -14,12 +14,31 @@ enum CSIWriter {
     /// bytes B,G,R,A. The pixel encoding is in BGRA byte order in memory.
     static let pixelFormatARGB: UInt32 = 0x41524742
 
+    /// `pixelFormat` = 'JPEG' as an LE multi-char constant. Produces file
+    /// bytes G,E,P,J. Reused for preserved-source JPG renditions; CoreUI
+    /// dispatches on this constant to invoke its JPEG decoder on the
+    /// DWAR-wrapped body.
+    static let pixelFormatJPEG: UInt32 = 0x4A504547
+
+    /// `pixelFormat` = 'SVG ' (trailing space) as an LE multi-char constant.
+    /// Produces file bytes space,G,V,S. Used for preserved-source SVG
+    /// renditions; CoreUI dispatches on this constant to invoke its SVG
+    /// renderer on the DWAR-wrapped body.
+    static let pixelFormatSVG: UInt32 = 0x53564720
+
     /// Layout types observed in the reference. The names are derived from
     /// CoreUI symbol names where known.
     enum Layout: UInt16 {
         /// Per the reference: every raw bitmap icon emitted by actool uses 12.
+        /// Preserved-source JPG renditions reuse this same layout value (the
+        /// pixelFormat selects the decoder, not the layout).
         case bitmapIcon = 12
         case namedColor = 1009
+        /// Used by preserved-source SVG renditions in CoreUI 970. JPG keeps
+        /// `bitmapIcon` because JPEG sits inside CoreUI's bitmap-asset
+        /// category; SVG promotes to its own layout because vector
+        /// renditions surface a different AssetType to `assetutil`.
+        case vector = 9
     }
 
     static func bitmap(name: String, body: BitmapBody, scaleFactor: UInt32) -> Data {
@@ -47,6 +66,63 @@ enum CSIWriter {
         )
         w.write(tvl)
         w.write(payload)
+        return w.data
+    }
+
+    /// Preserved-source rendition for `.svg` and `.jpg`. The CSI header is
+    /// the same shape as for bitmaps (184 bytes) but several fields encode
+    /// "not a decoded bitmap": dimensions, scaleFactor (for SVG), and
+    /// colorSpace are all zero. The body is a DWAR envelope wrapping the
+    /// original source bytes, with LZFSE compression for SVG and raw
+    /// passthrough for JPG. Layout, pixelFormat, renditionFlags, and TVL
+    /// shape all differ by source format.
+    static func preservedSource(body: PreservedSourceBody, scaleFactor: UInt32) -> Data {
+        let layout: Layout
+        let pixelFormat: UInt32
+        let renditionFlags: UInt32
+        let tvl: Data
+        let dwarFlags: UInt32
+        let dwarPayload: [UInt8]
+        switch body.format {
+        case .svg:
+            layout = .vector
+            pixelFormat = pixelFormatSVG
+            // Bit 2 set; this distinguishes the vector category from the
+            // generic-image bitmap category (bit 4) in the reference output.
+            renditionFlags = 0x04
+            tvl = vectorTVL()
+            dwarFlags = 1
+            dwarPayload = lzfseEncode([UInt8](body.sourceData))
+        case .jpeg(let width, let height):
+            layout = .bitmapIcon
+            pixelFormat = pixelFormatJPEG
+            // Same bit as generic-image bitmap; JPEG lives in the bitmap
+            // category from CoreUI's classification standpoint.
+            renditionFlags = 0x10
+            tvl = jpegTVL(width: width, height: height)
+            dwarFlags = 0
+            dwarPayload = [UInt8](body.sourceData)
+        }
+        let envelope = dwarEnvelope(flags: dwarFlags, payload: dwarPayload)
+        var w = ByteWriter()
+        writeHeader(
+            into: &w,
+            renditionFlags: renditionFlags,
+            // Width / height live in TVL 1001 for JPG; the CSI header carries
+            // zeros for both preserved-source variants in the reference.
+            width: 0,
+            height: 0,
+            scaleFactor: scaleFactor,
+            pixelFormat: pixelFormat,
+            colorSpace: 0,
+            layout: layout,
+            name: body.renditionName,
+            tvlLength: UInt32(tvl.count),
+            bitmapCount: 1,
+            renditionLength: UInt32(envelope.count)
+        )
+        w.write(tvl)
+        w.write(envelope)
         return w.data
     }
 
@@ -178,6 +254,87 @@ enum CSIWriter {
         w.writeLE(aligned)
 
         precondition(w.offset == 104, "bitmap TVL must be 104 bytes; got \(w.offset)")
+        return w.data
+    }
+
+    /// 12-byte framing wrapper introduced in CoreUI 970 for preserved-source
+    /// renditions. `flags = 1` declares the payload is an LZFSE-framed inner
+    /// stream (`bvxn` / `bvx2`); `flags = 0` declares the payload is the raw
+    /// source bytes. The same envelope serves both SVG (compressed) and JPG
+    /// (raw); CoreUI uses the surrounding CSI `pixelFormat` to choose a
+    /// decoder for the inner content.
+    static func dwarEnvelope(flags: UInt32, payload: [UInt8]) -> Data {
+        var w = ByteWriter()
+        // 'DWAR' in character order on disk (D, W, A, R). Same byte
+        // convention as META / MLEC / KCBC, not LE-multi-char like CTSI.
+        w.writeFourCC("DWAR")
+        w.writeLE(flags)
+        w.writeLE(UInt32(payload.count))
+        w.write(payload)
+        return w.data
+    }
+
+    /// Trimmed TVL for vector (SVG) renditions: 28 bytes carrying only
+    /// `1004 (slice/scale)` and `1006 (bitmap-count flag)`. The
+    /// bitmap-specific entries (`1001`, `1003`, `1007`) are omitted because
+    /// width, height, and bytes-per-row are not meaningful for a scale-free
+    /// vector source.
+    private static func vectorTVL() -> Data {
+        var w = ByteWriter()
+        // Type 1004 (slice/scale pair): (0, 1.0f).
+        w.writeLE(UInt32(1004))
+        w.writeLE(UInt32(8))
+        w.writeLE(UInt32(0))
+        w.writeLE(UInt32(Float(1).bitPattern))
+
+        // Type 1006: always 1 in the reference. Likely bitmap-count flag.
+        w.writeLE(UInt32(1006))
+        w.writeLE(UInt32(4))
+        w.writeLE(UInt32(1))
+
+        precondition(w.offset == 28, "vector TVL must be 28 bytes; got \(w.offset)")
+        return w.data
+    }
+
+    /// TVL for preserved-source JPG renditions: 92 bytes. Same shape as the
+    /// bitmap TVL but with type 1007 (bytes-per-row) omitted. Bytes-per-row
+    /// is a strided-bitmap concept that has no analogue in a JPEG bitstream;
+    /// CoreUI consumes the JPG by decoding the SOS markers itself.
+    private static func jpegTVL(width: UInt32, height: UInt32) -> Data {
+        var w = ByteWriter()
+
+        // Type 1001 (bitmap descriptor): (1, 0, 0, width, height).
+        w.writeLE(UInt32(1001))
+        w.writeLE(UInt32(20))
+        w.writeLE(UInt32(1))
+        w.writeLE(UInt32(0))
+        w.writeLE(UInt32(0))
+        w.writeLE(width)
+        w.writeLE(height)
+
+        // Type 1003 (destination rect): (1, 0, 0, 0, 0, width, height).
+        w.writeLE(UInt32(1003))
+        w.writeLE(UInt32(28))
+        w.writeLE(UInt32(1))
+        w.writeLE(UInt32(0))
+        w.writeLE(UInt32(0))
+        w.writeLE(UInt32(0))
+        w.writeLE(UInt32(0))
+        w.writeLE(width)
+        w.writeLE(height)
+
+        // Type 1004 (slice/scale pair): (0, 1.0f).
+        w.writeLE(UInt32(1004))
+        w.writeLE(UInt32(8))
+        w.writeLE(UInt32(0))
+        w.writeLE(UInt32(Float(1).bitPattern))
+
+        // Type 1006: always 1 in the reference.
+        w.writeLE(UInt32(1006))
+        w.writeLE(UInt32(4))
+        w.writeLE(UInt32(1))
+
+        precondition(w.offset == 92, "JPEG TVL must be 92 bytes; got \(w.offset)")
         return w.data
     }
 

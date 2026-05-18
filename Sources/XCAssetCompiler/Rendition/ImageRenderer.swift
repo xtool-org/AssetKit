@@ -10,31 +10,86 @@ enum ImageRenderer {
             guard FileManager.default.fileExists(atPath: src.path) else {
                 throw XCAssetCompilerError.missingReferencedFile(asset: set.name, filename: filename)
             }
-            let (width, height, bgra) = try decodeBGRAPremultiplied(at: src)
-            let gamut = image.displayGamut ?? .sRGB
             let appearance = image.appearances?.first { $0.darkLuminosity }
-            out.append(Rendition(
-                name: set.name,
-                idiom: image.idiom,
-                scale: image.scale,
-                appearance: appearance,
-                gamut: gamut,
-                body: .bitmap(BitmapBody(
+            let body: Rendition.Body
+            let gamut: Gamut?
+            let renditionScale: Scale?
+            switch sourceFormat(of: filename) {
+            case .png:
+                let (width, height, bgra) = try decodeBGRAPremultiplied(at: src)
+                let g = image.displayGamut ?? .sRGB
+                gamut = g
+                renditionScale = image.scale
+                body = .bitmap(BitmapBody(
                     width: width,
                     height: height,
                     pixelsBGRA: bgra,
-                    colorSpaceID: gamut.colorSpaceID,
+                    colorSpaceID: g.colorSpaceID,
                     kind: .image,
                     renditionName: filename
                 ))
+            case .svg:
+                let data = try Data(contentsOf: src)
+                gamut = nil
+                // SVG renditions are scale-free in concept, but the reference
+                // CoreUI 970 catalog keys the SVG source rendition with
+                // scale=1 (so it lives in the "1x slot" of the rendition
+                // tree). Encoding scale=0 leaves the rendition orphaned from
+                // CoreUI's scale-based lookups.
+                renditionScale = .x1
+                body = .preservedSource(PreservedSourceBody(
+                    format: .svg,
+                    sourceData: data,
+                    renditionName: filename
+                ))
+            case .jpeg:
+                let data = try Data(contentsOf: src)
+                let dims = try JPEGDimensions.read(data)
+                gamut = nil
+                renditionScale = image.scale
+                body = .preservedSource(PreservedSourceBody(
+                    format: .jpeg(width: dims.width, height: dims.height),
+                    sourceData: data,
+                    renditionName: filename
+                ))
+            case .unsupported:
+                throw XCAssetCompilerError.unsupportedAssetType(filename)
+            }
+            out.append(Rendition(
+                name: set.name,
+                idiom: image.idiom,
+                scale: renditionScale,
+                appearance: appearance,
+                gamut: gamut,
+                body: body
             ))
         }
         return out
     }
 
+    enum SourceFormat {
+        case png
+        case svg
+        case jpeg
+        case unsupported
+    }
+
+    static func sourceFormat(of filename: String) -> SourceFormat {
+        switch (filename as NSString).pathExtension.lowercased() {
+        case "png": return .png
+        case "svg": return .svg
+        case "jpg", "jpeg": return .jpeg
+        default: return .unsupported
+        }
+    }
+
     static func appIconRenditions(for appIcon: LoadedAppIcon, files: [IconFile]) throws -> [Rendition] {
         var out: [Rendition] = []
         for file in files {
+            let filename = file.sourceURL.lastPathComponent
+            guard sourceFormat(of: filename) == .png else {
+                throw XCAssetCompilerError.unsupportedAppIconSource(asset: appIcon.name, filename: filename)
+            }
             let (width, height, bgra) = try decodeBGRAPremultiplied(at: file.sourceURL)
             let scale: Scale = {
                 switch file.scale {

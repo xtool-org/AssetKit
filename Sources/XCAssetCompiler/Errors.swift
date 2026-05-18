@@ -11,6 +11,8 @@ public enum XCAssetCompilerError: Error, Sendable, Equatable {
     case appIconSizeMissing(asset: String, size: String)
     case notADirectory(path: String)
     case unsupportedAssetType(String)
+    case malformedJPEG(reason: String)
+    case unsupportedAppIconSource(asset: String, filename: String)
 }
 
 extension XCAssetCompilerError: CustomStringConvertible {
@@ -36,6 +38,10 @@ extension XCAssetCompilerError: CustomStringConvertible {
             return "Expected an .xcassets directory at \(path)"
         case .unsupportedAssetType(let name):
             return "Unsupported asset type: \(name)"
+        case .malformedJPEG(let reason):
+            return "Malformed JPEG: \(reason)"
+        case .unsupportedAppIconSource(let asset, let filename):
+            return "AppIcon '\(asset)' source file '\(filename)' is not a PNG; only .png is supported for app icons"
         }
     }
 }

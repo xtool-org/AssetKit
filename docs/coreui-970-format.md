@@ -90,7 +90,7 @@ The APPEARANCEKEYS tree maps appearance name strings to the numeric IDs that app
 
 Registering only the macOS names produces a catalog where `UIImage(named:)` returns nil at runtime for every asset, even though `assetutil --info` parses cleanly. SpringBoard's appicon path doesn't depend on APPEARANCEKEYS (it falls back to loose PNGs we emit alongside `Assets.car`, see §"SpringBoard fallback" below), which masks the bug for icon-only catalogs.
 
-Both `any` and `dark` rows are required, because rendition keys pack `appearance=0` for default variants and `appearance=1` for dark (`luminosity dark`) variants; omitting either row breaks lookups for the corresponding catalog entries.
+The `UIAppearanceAny` row (id=0) is always emitted, because every rendition key packs `appearance=0` as the default-variant marker — even in catalogs with no explicit appearance entries. The `UIAppearanceDark` row (id=1) is emitted only when at least one rendition in the catalog declares the dark variant (matches actool's reference: dark-free catalogs omit the row entirely). Each appearance ID is encoded as a single `u16 LE`.
 
 Implementation: [Sources/XCAssetCompiler/CAR/AppearanceKeys.swift](../Sources/XCAssetCompiler/CAR/AppearanceKeys.swift).
 
@@ -112,19 +112,102 @@ Structure:
 - Each leaf entry's "key" slot is an inline `u32` `NameIdentifier` (not a block pointer like other trees).
 - Each value is a 52-byte descriptor.
 
-The 52-byte descriptor layout was derived by diffing `actool`'s outputs for `.appiconset` vs `.imageset` renditions. The first 7 `u32`s are constant (header-like); the remaining 6 vary by asset kind:
+The 52-byte descriptor layout was derived by diffing `actool`'s outputs for `.appiconset` vs `.imageset` (bitmap source) vs `.imageset` (vector source) renditions. The first 7 `u32`s are header-like; the only one that varies across kinds is slot 6 (an asset-kind marker: `0x04` for PNG / JPG, `0x0e` for SVG vector sources and for appicons). The remaining 6 fields vary by asset kind:
 
-| Field | AppIcon | Image |
-|---|---|---|
-| `u32` slot 8 | (idiom×subtype count) | (idiom×subtype count) |
-| `(u16, u16)` slot 9 | `(1, 1)` | `(1, 0)` |
-| `u32` slot 10 | `7` | `1` |
+| Field | AppIcon | Image (PNG / JPG) | Vector (SVG) |
+|---|---|---|---|
+| `u32` slot 6 (asset-kind marker) | `0x0e` | `0x04` | `0x0e` |
+| `u32` slot 8 | (idiom×subtype count) | (idiom×subtype count) | (idiom×subtype count) |
+| `(u16, u16)` slot 9 | `(1, 1)` | `(1, 0)` | `(1, 0)` |
+| `u32` slot 10 | `7` | `1` | `1` |
 
-Followed by three trailing `0xFFFFFFFF` sentinels. Total: 52 bytes.
+Followed by three trailing `0xFFFFFFFF` sentinels. Total: 52 bytes. The Vector template matches the Image template after slot 6 — the marker is the only thing CoreUI uses to route the lookup differently for SVG sources.
 
-The `renditionFlags` field in the CSI header differs correspondingly — bit 4 set for `.image` renditions, cleared for `.appIcon`.
+The `renditionFlags` field in the CSI header differs correspondingly — bit 4 set for `.image` renditions, bit 2 set for vector renditions, both cleared for `.appIcon`.
 
 Implementation: [Sources/XCAssetCompiler/CAR/BitmapKeys.swift](../Sources/XCAssetCompiler/CAR/BitmapKeys.swift).
+
+## 7. Preserved-source renditions: SVG and JPG via the DWAR envelope
+
+CoreUI 970 (Xcode 26) introduced a new rendition shape for sources the user wants stored verbatim rather than decoded into a raw bitmap. SVG and JPG both ride this path. The envelope is reused; the surrounding CSI header's `pixelFormat` selects the decoder CoreUI invokes at draw time.
+
+### DWAR envelope
+
+A 12-byte framing wrapper at the start of the rendition body:
+
+| Offset | Size | Field | Notes |
+|---|---|---|---|
+| 0 | 4 | magic | `'DWAR'` in character order on disk (not LE-reversed like `CTSI` / `CTAR`). Same convention as `MLEC`, `KCBC`, `META`. |
+| 4 | 4 | flags `u32 LE` | `1` ⇒ payload is an LZFSE-framed inner stream (`bvxn` or `bvx2`); `0` ⇒ payload is the raw source bytes. |
+| 8 | 4 | innerLen `u32 LE` | Length of the payload that follows. |
+| 12 | innerLen | payload | LZFSE frame for SVG; raw JPEG bytes for JPG. |
+
+The same envelope serves both formats; the inner compression mode is chosen per source.
+
+### SVG vector rendition
+
+| CSI field | Value |
+|---|---|
+| `layout` | `9` (new in CoreUI 970) |
+| `pixelFormat` | `'SVG '` (trailing space) as an LE multi-char constant; on-disk bytes ` `, `G`, `V`, `S`. |
+| `renditionFlags` | `0x4` (bit 2 set; distinguishes vector from the generic-image category) |
+| `width` / `height` / `scaleFactor` / `colorSpace` | all `0` (vector is scale-free; intrinsic dimensions live in the SVG viewBox) |
+| `tvlLength` | `28` |
+| `bitmapCount` | `1` |
+| body | `DWAR(flags=1)` followed by `bvxn(LZFSE-encoded raw SVG XML bytes)` |
+
+The TVL section carries only two entries:
+
+| Type | Length | Value |
+|---|---|---|
+| 1004 | 8 | slice/scale pair `(0, 1.0f)` |
+| 1006 | 4 | `1` |
+
+Entries `1001` (bitmap descriptor), `1003` (destination rect), and `1007` (bytes-per-row) are absent — they are pixel-specific and have no meaning for a vector source.
+
+### JPG raw-passthrough rendition
+
+| CSI field | Value |
+|---|---|
+| `layout` | `12` — **same as bitmap**; JPG sits inside CoreUI's bitmap-asset category and reuses the bitmap layout value |
+| `pixelFormat` | `'JPEG'` as an LE multi-char constant; on-disk bytes `G`, `E`, `P`, `J`. |
+| `renditionFlags` | `0x10` (same as generic `.image` bitmap) |
+| `width` / `height` / `colorSpace` | `0` in the CSI header; decoded dimensions live in TVL `1001` and `1003` |
+| `scaleFactor` | `scale*100` (respects `@Nx` filename suffix, same as PNG) |
+| `tvlLength` | `92` |
+| `bitmapCount` | `1` |
+| body | `DWAR(flags=0)` followed by raw JPEG bytes (JFIF / EXIF / SOS markers all included verbatim) |
+
+The TVL section is shaped like the bitmap TVL but with type `1007` (bytes-per-row) omitted — bytes-per-row is a strided-bitmap concept that has no analogue in a JPEG bitstream. The decoded width / height in `1001` and `1003` are populated by walking the JPEG segment chain to SOF0 / SOF1 / SOF2; see [Sources/XCAssetCompiler/Rendition/JPEGDimensions.swift](../Sources/XCAssetCompiler/Rendition/JPEGDimensions.swift).
+
+| Type | Length | Value |
+|---|---|---|
+| 1001 | 20 | `(1, 0, 0, width, height)` |
+| 1003 | 28 | `(1, 0, 0, 0, 0, width, height)` |
+| 1004 | 8 | slice/scale pair `(0, 1.0f)` |
+| 1006 | 4 | `1` |
+
+### Surrounding-table treatment
+
+JPG renditions sit in the generic-image category at every layer above the CSI body, exactly like PNG. SVG vector renditions diverge in two places because CoreUI keys the vector-source slot separately from the bitmap-source slot.
+
+- **FACETKEYS**: `(element=85, part=181)` for all three source formats. The asset-level entry is opaque to source format; one FACETKEYS row per asset name regardless of whether the underlying renditions are PNG, JPG, or SVG.
+- **BITMAPKEYS**:
+  - PNG, JPG → `.image` 52-byte descriptor template (slot 6 asset-kind marker = `0x04`).
+  - SVG → separate `.vector` template (same shape as `.image` after slot 6; marker = `0x0e`).
+  See §6 above for the full descriptor layout.
+- **RENDITIONS tree key** (per-rendition, 18-byte packed-attribute tuple):
+  - PNG, JPG → `(element=85, part=181)`.
+  - SVG vector → `(element=85, part=42, scale=1)`. The reference packs every SVG vector rendition into the `scale=1` slot of CoreUI's lookup tree regardless of any `@Nx` in the source filename; encoding `scale=0` here orphans the rendition from CoreUI's scale-keyed lookups even though `assetutil --info` still parses the file cleanly.
+  - For all source formats, the `appearance` slot still carries dark-mode variants.
+- **APPEARANCEKEYS**: rows emitted on demand — `UIAppearanceAny` always, `UIAppearanceDark` only when at least one rendition declares the dark variant. Each ID is a single `u16 LE`.
+- **KEYFORMAT**, **EXTENDED_METADATA**, **CARHEADER**: unchanged.
+
+Implementation: [Sources/XCAssetCompiler/CAR/CSIWriter.swift](../Sources/XCAssetCompiler/CAR/CSIWriter.swift), [Sources/XCAssetCompiler/Rendition/Rendition.swift](../Sources/XCAssetCompiler/Rendition/Rendition.swift), [Sources/XCAssetCompiler/Rendition/ImageRenderer.swift](../Sources/XCAssetCompiler/Rendition/ImageRenderer.swift).
+
+### Historical note
+
+Older Xcode releases (11 through 13 era) converted SVG to PDF internally and stored the PDF stream as a CoreUI vector rendition body. Modern actool no longer does the PDF round-trip: it stores the SVG XML directly, LZFSE-compressed inside the DWAR envelope. Anything you may have read about `preserves-vector-representation` triggering an SVG-to-PDF intermediate is the older shape.
 
 ## SpringBoard fallback (loose-PNG escape hatch)
 

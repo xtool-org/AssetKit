@@ -4,6 +4,7 @@ struct Rendition: Sendable {
     enum Body: Sendable {
         case bitmap(BitmapBody)
         case color(ColorBody)
+        case preservedSource(PreservedSourceBody)
     }
 
     var name: String
@@ -44,4 +45,32 @@ struct ColorBody: Sendable {
     var blue: Double
     var alpha: Double
     var colorSpaceID: UInt8
+}
+
+/// Source file kept verbatim inside a DWAR envelope rather than rasterised
+/// or re-encoded. Used for `.svg` (LZFSE-compressed XML inner payload) and
+/// `.jpg` (raw JPEG inner payload). The source-format distinction is carried
+/// in the surrounding CSI header's `pixelFormat` and in `Format` below.
+struct PreservedSourceBody: Sendable {
+    /// Source format plus the per-format data CoreUI needs alongside the
+    /// raw bytes. JPEG carries decoded pixel dimensions (populated by
+    /// `JPEGDimensions` and emitted into TVL types 1001 / 1003); SVG carries
+    /// nothing extra (vector is scale-free and the reference Assets.car
+    /// leaves the dimension TVL entries out for SVG renditions). Keeping
+    /// these in the enum makes it unrepresentable to construct a JPEG body
+    /// without dimensions.
+    enum Format: Sendable {
+        case svg
+        case jpeg(width: UInt32, height: UInt32)
+    }
+
+    var format: Format
+    /// The user-provided source bytes, unmodified. For SVG this is the raw
+    /// XML; for JPG this is the entire JPEG file including JFIF / EXIF
+    /// segments.
+    var sourceData: Data
+    /// The source filename (e.g. "Svg.svg", "Jpg@2x.jpg"). Stored in the
+    /// CSI header's 128-char name field; actool uses the filename here, not
+    /// the asset name.
+    var renditionName: String
 }

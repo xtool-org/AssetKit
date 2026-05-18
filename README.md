@@ -27,13 +27,17 @@ if let bundle = result.appIconBundle {
 
 ## What it supports
 
-- `.imageset` (PNG sources, 1x/2x/3x scales, sRGB and display-P3, dark/light appearances)
+- `.imageset`
+  - PNG sources (1x/2x/3x scales, sRGB and display-P3, dark/light appearances)
+  - SVG sources stored as preserved vector renditions (XML kept verbatim, LZFSE-compressed inside a DWAR envelope; iOS renders crisp at any scale)
+  - JPG sources stored as preserved raw renditions (JPEG bytes passed through; original compression preserved)
 - `.colorset` (sRGB and display-P3, hex or float components, dark/light appearances)
-- `.appiconset` (per-idiom and per-size, with the loose-PNG fallback that SpringBoard expects alongside `Assets.car`)
+- `.appiconset` (per-idiom and per-size, with the loose-PNG fallback that SpringBoard expects alongside `Assets.car`). PNG sources only; SVG/JPG are rejected because SpringBoard's icon-render pipeline requires PNG.
 
 ## What it deliberately doesn't support
 
-- Vector renditions (`.pdf`, `.svg`)
+- `.pdf` vector sources (the CoreUI 970 DWAR envelope path is SVG-flavoured; adding PDF would need a separate `pixelFormat`)
+- Multi-rendition fanout — actool emits multiple compression variants per asset (`deepmap-lzfse`, `deepmap2`, `palette-img`); this writer emits one rendition per `(idiom, scale, appearance)` tuple per source format. Sufficient for iOS 16+.
 - Data sets, sticker sets, AR reference objects
 - macOS / tvOS / watchOS asset variants beyond what the structural attribute IDs encode
 
