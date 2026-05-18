@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-linux:
+    name: Test (Linux)
+    runs-on: ubuntu-24.04
+    container:
+      image: swift:6.0-noble
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build
+        run: swift build
+      - name: Test
+        run: swift test
+
+  test-macos:
+    name: Test (macOS, assetutil parse gate)
+    runs-on: macos-26
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Select Xcode
+        run: |
+          # Pin to the Xcode that ships CoreUI 970 (Xcode 26+). The
+          # AssetutilParseTests gate verifies our writer's bytes against
+          # this CoreUI version specifically.
+          sudo xcode-select -s /Applications/Xcode_26.app
+          xcodebuild -version
+      - name: Build
+        run: swift build
+      - name: Test
+        run: swift test
