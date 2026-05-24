@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@v6
       - name: Build and test
         run: |
-          docker run -v .:/work -w /work -it swift:6.3 swift test
+          docker run -v .:/work -w /work -t swift:6.3 swift test
   build-macos:
     runs-on: macos-26
     steps:
@@ -43,5 +43,5 @@ jobs:
           set -o pipefail \
           && xcodebuild test \
             -skipMacroValidation -skipPackagePluginValidation \
-            -scheme AssetKit -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' \
+            -scheme AssetKit -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest,arch=arm64' \
           | xcbeautify
