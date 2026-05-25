@@ -9,7 +9,7 @@ import Testing
 ///
 /// This is the durable verification for CoreUI format compatibility. The
 /// underlying byte format drifts across Xcode releases (see
-/// `Sources/XCAssetCompiler/CAR/KeyFormat.swift`), so this test will catch
+/// `Sources/AssetKit/CAR/KeyFormat.swift`), so this test will catch
 /// the regression on a future macOS runner before users do.
 @Suite("assetutil parse gate")
 struct AssetutilParseTests {
@@ -34,7 +34,10 @@ struct AssetutilParseTests {
         try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: scratch) }
 
-        let compiler = XCAssetCompiler(deploymentTarget: "16.0")
+        let compiler = XCAssetCompiler(
+            deploymentTarget: "16.0",
+            svgRasterizer: StubSVGRasterizer()
+        )
         let result = try await compiler.compile(catalog: fixtureURL)
         let carURL = scratch.appendingPathComponent("Assets.car")
         try result.carData.write(to: carURL)

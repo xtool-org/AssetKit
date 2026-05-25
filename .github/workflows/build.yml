@@ -35,16 +35,3 @@ jobs:
       - name: Build and test
         run: |
           swift test
-  build-ios:
-    runs-on: macos-26
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-      - uses: ./.github/actions/configure-xcode
-      - name: Build and test
-        run: |
-          set -o pipefail \
-          && xcodebuild test \
-            -skipMacroValidation -skipPackagePluginValidation \
-            -scheme AssetKit -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest,arch=arm64' \
-          | xcbeautify

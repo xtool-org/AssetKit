@@ -1,11 +1,10 @@
-// swift-tools-version: 6.3
+// swift-tools-version: 6.2
 
 import PackageDescription
 
 let package = Package(
     name: "AssetKit",
     platforms: [
-        .iOS(.v16),
         .macOS(.v13),
     ],
     products: [

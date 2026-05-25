@@ -40,7 +40,10 @@ struct CARWriterTests {
         }
         """.utf8).write(to: colorSet.appendingPathComponent("Contents.json"))
 
-        let compiler = XCAssetCompiler(deploymentTarget: "16.0")
+        let compiler = XCAssetCompiler(
+            deploymentTarget: "16.0",
+            svgRasterizer: StubSVGRasterizer()
+        )
         let result = try await compiler.compile(catalog: tmp)
         #expect(result.carData.count > 600)
         #expect(Array(result.carData.prefix(8)) == Array("BOMStore".utf8))
