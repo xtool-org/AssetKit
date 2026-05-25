@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import XCAssetCompiler
+@testable import AssetKit
 
 @Suite("SVG intrinsic-dimension parser")
 struct SVGDimensionsTests {

@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import XCAssetCompiler
+@testable import AssetKit
 
 /// Byte-equality tests for preserved-source renditions (SVG, JPG) against
 /// the dumped reference Assets.car. The reference bytes live at

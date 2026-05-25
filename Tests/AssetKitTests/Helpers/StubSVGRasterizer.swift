@@ -1,6 +1,6 @@
 import Foundation
 import PNG
-@testable import XCAssetCompiler
+@testable import AssetKit
 
 /// Deterministic test-only `SVGRasterizer`. Produces a real PNG of exactly
 /// the requested dimensions (so the rendered BitmapBody has matching

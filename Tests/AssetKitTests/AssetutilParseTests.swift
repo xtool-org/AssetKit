@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import XCAssetCompiler
+@testable import AssetKit
 
 /// End-to-end CI gate: compile the bundled fixture catalog, then shell out to
 /// Apple's `assetutil --info` and assert it parses our `Assets.car` cleanly

@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import XCAssetCompiler
+@testable import AssetKit
 
 @Suite("CatalogLoader")
 struct CatalogLoaderTests {

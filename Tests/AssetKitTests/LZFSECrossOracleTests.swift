@@ -2,7 +2,7 @@
 import Compression
 import Foundation
 import Testing
-@testable import XCAssetCompiler
+@testable import AssetKit
 
 /// Second-source oracle: encode with the vendored LZFSE encoder, decode with
 /// Apple's `Compression` framework. Catches encoder bugs that a vendored

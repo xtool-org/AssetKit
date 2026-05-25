@@ -1,17 +1,17 @@
-// swift-tools-version:6.0
+// swift-tools-version: 6.3
 
 import PackageDescription
 
 let package = Package(
-    name: "xcasset-compiler",
+    name: "AssetKit",
     platforms: [
         .iOS(.v16),
         .macOS(.v13),
     ],
     products: [
         .library(
-            name: "XCAssetCompiler",
-            targets: ["XCAssetCompiler"]
+            name: "AssetKit",
+            targets: ["AssetKit"]
         ),
     ],
     dependencies: [
@@ -25,21 +25,22 @@ let package = Package(
             publicHeadersPath: "include"
         ),
         .target(
-            name: "XCAssetCompiler",
+            name: "AssetKit",
             dependencies: [
                 .product(name: "PNG", package: "swift-png"),
                 "CLZFSE",
             ]
         ),
         .testTarget(
-            name: "XCAssetCompilerTests",
+            name: "AssetKitTests",
             dependencies: [
-                "XCAssetCompiler",
+                "AssetKit",
                 "CLZFSE",
             ],
             resources: [
                 .copy("Fixtures"),
             ]
         ),
-    ]
+    ],
+    swiftLanguageModes: [.v6]
 )

@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 import PNG
-@testable import XCAssetCompiler
+@testable import AssetKit
 
 /// Verifies that a `.svg` source produces the expected rendition fan-out:
 /// one preserved-source vector rendition plus three rasterised bitmap

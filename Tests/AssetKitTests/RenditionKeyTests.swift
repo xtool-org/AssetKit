@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import XCAssetCompiler
+@testable import AssetKit
 
 /// `risk-key-packing`: rendition key encode/decode round-trip across the
 /// KEYFORMAT attribute space CoreUI 970 expects. The 9-token, 18-byte key

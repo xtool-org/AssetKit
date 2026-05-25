@@ -1,4 +1,4 @@
-# xcasset-compiler
+# AssetKit
 
 A clean-room Swift implementation of Apple's `actool` that compiles `.xcassets` catalogs into the `Assets.car` file format.
 
@@ -7,11 +7,11 @@ Targets CoreUI 970 (Xcode 26 / iOS 16+). See [docs/coreui-970-format.md](docs/co
 ## Usage
 
 ```swift
-.package(url: "https://github.com/<org>/xcasset-compiler", .upToNextMinor(from: "1.0.0")),
+.package(url: "https://github.com/xtool-org/AssetKit", .upToNextMinor(from: "1.0.0")),
 ```
 
 ```swift
-import XCAssetCompiler
+import AssetKit
 
 // `svgRasterizer` defaults to `RsvgConvertRasterizer()`, which shells out
 // to `rsvg-convert` (install with `apt install librsvg2-tools`,
@@ -46,7 +46,7 @@ if let bundle = result.appIconBundle {
 - Data sets, sticker sets, AR reference objects
 - macOS / tvOS / watchOS asset variants beyond what the structural attribute IDs encode
 
-These can be added; the format mechanisms in `Sources/XCAssetCompiler/CAR/` are general enough.
+These can be added; the format mechanisms in `Sources/AssetKit/CAR/` are general enough.
 
 ## Compression
 
@@ -64,4 +64,4 @@ The test suite includes a macOS-only gate (`AssetutilParseTests`) that compiles 
 
 ## License
 
-MIT. See [LICENSE.md](LICENSE.md).
+MIT. See [LICENSE](LICENSE).

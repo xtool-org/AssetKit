@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 import CLZFSE
-@testable import XCAssetCompiler
+@testable import AssetKit
 
 /// Verifies the vendored LZFSE encoder produces streams that round-trip
 /// through the vendored decoder across a spread of representative inputs.
