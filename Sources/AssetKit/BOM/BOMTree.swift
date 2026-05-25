@@ -50,7 +50,11 @@ struct BOMTree {
             keyBlockIDs.append(bom.addBlock(entry.key))
         }
 
-        // Leaf node block
+        // Leaf node block, padded to blockSize. macOS 26.4+'s assetutil reads
+        // the leaf as a `blockSize`-sized stream and faults with
+        // `BOMStreamGetDataPointer buffer overflow` if the underlying block is
+        // shorter; older assetutil silently tolerated a short leaf.
+        let blockSize: UInt32 = 4096
         var leaf = ByteWriter()
         leaf.writeBE(UInt16(1))                     // isLeaf
         leaf.writeBE(UInt16(sorted.count))          // count
@@ -59,6 +63,9 @@ struct BOMTree {
         for i in 0..<sorted.count {
             leaf.writeBE(valueBlockIDs[i])
             leaf.writeBE(keyBlockIDs[i])
+        }
+        if leaf.offset < Int(blockSize) {
+            leaf.writeZeros(Int(blockSize) - leaf.offset)
         }
         let leafID = bom.addBlock(leaf.data)
 
@@ -70,7 +77,7 @@ struct BOMTree {
         header.writeBE(treeMagic)
         header.writeBE(UInt32(1))                   // version
         header.writeBE(leafID)                      // childBlockID
-        header.writeBE(UInt32(4096))                // blockSize
+        header.writeBE(blockSize)
         header.writeBE(UInt32(sorted.count))        // pathCount
         header.write(byte: 0)                       // isPathInternal
         header.writeZeros(8)                        // trailing reserved

@@ -27,9 +27,9 @@ The CoreUI-named variables this writer emits, in the canonical order `actool` pr
 
 iOS's `UIImage(named:)` and SpringBoard's icon-render pipeline both walk the vars table in this order and reject catalogs whose ordering doesn't match the reference shape. Order is load-bearing.
 
-## Six places the public writeups are wrong for CoreUI 970
+## Seven places the public writeups are wrong for CoreUI 970
 
-These are listed by detection mode — the first three are caught by Apple's own `assetutil --info`, the last three silently produce a catalog that parses cleanly but fails at runtime on a real iOS device. The latter three were the costly ones to discover, because there's no easy local signal.
+These are listed by detection mode — §§1–3 and §7 are caught by Apple's own `assetutil --info`; §§4–6 silently produce a catalog that parses cleanly but fails at runtime on a real iOS device. The runtime-only ones were the costly ones to discover, because there's no easy local signal. §7 is also notionally easy to detect, but it only fires on macOS 26.4+ — the older `/usr/bin/assetutil` silently tolerated the wrong shape.
 
 ### 1. AttributeID enum values are not stable across CoreUI versions
 
@@ -126,6 +126,16 @@ Followed by three trailing `0xFFFFFFFF` sentinels. Total: 52 bytes. The Vector t
 The `renditionFlags` field in the CSI header differs correspondingly — bit 4 set for `.image` renditions, bit 2 set for vector renditions, both cleared for `.appIcon`.
 
 Implementation: [Sources/AssetKit/CAR/BitmapKeys.swift](../Sources/AssetKit/CAR/BitmapKeys.swift).
+
+### 7. BOM tree leaves must be padded to the declared `blockSize`
+
+Every BOM tree header declares a `blockSize` (`u32`) — the B-tree page size, e.g. `4096` for RENDITIONS / FACETKEYS / APPEARANCEKEYS and `1024` for BITMAPKEYS. The leaf BOM block that the header points to must be at least `blockSize` bytes; pad with zeros after the entry list. `actool` always pads.
+
+On macOS ≤ 26.0, `/usr/bin/assetutil` read only the bytes the leaf's count field said were there and silently tolerated a short underlying block. On macOS 26.4+, `assetutil` reads the full `blockSize` from the leaf stream and aborts with `assetutil: fatal error error exiting: 'BOMStreamGetDataPointer buffer overflow' invalid file` if the block is shorter. iOS's runtime walks leaves by the count field and was never affected — but a catalog that emits short leaves is now unparseable by Apple's own validator on a current macOS.
+
+Note that `/usr/bin/assetutil` is a system binary, not bundled with Xcode — its strictness tracks the macOS version, not the selected Xcode. See also: [the AssetutilParseTests gate](../Tests/AssetKitTests/AssetutilParseTests.swift).
+
+Implementation: [Sources/AssetKit/BOM/BOMTree.swift](../Sources/AssetKit/BOM/BOMTree.swift).
 
 ## 7. Preserved-source renditions: SVG and JPG via the DWAR envelope
 
@@ -254,7 +264,7 @@ The `assetutil` parse gate in [Tests/AssetKitTests/AssetutilParseTests.swift](..
 
 Crash signals like `_swapKeyFormat` are register heuristics from the iOS crash reporter, not diagnoses; treat them as "something is wrong upstream of this point" rather than "this specific function is the bug."
 
-## Drift across Xcode versions
+## Drift across Xcode and macOS versions
 
 CoreUI's format has changed silently in past Xcode releases without changes to the writeups people cite. Anyone targeting a newer Xcode should:
 
@@ -263,5 +273,10 @@ CoreUI's format has changed silently in past Xcode releases without changes to t
 3. Re-verify the magic-word endianness for each block.
 4. Re-verify the BITMAPKEYS descriptor layout against `.imageset` and `.appiconset` reference outputs.
 5. Run the `assetutil` parse gate against new fixture catalogs.
+
+Two distinct sources of drift to keep separate:
+
+- **Xcode (`actool`) drift** — the bytes Apple's compiler emits. Item §1 (AttributeIDs) is the classic example.
+- **macOS (`/usr/bin/assetutil`) drift** — how strictly Apple's validator reads existing bytes. `assetutil` is a system binary, not bundled with Xcode; its parser strictness tracks the macOS version. §7 (leaf padding) was discovered exactly this way: a catalog accepted by `assetutil` on macOS 26.0 was rejected by the same code on macOS 26.4 with no change to `actool` or the writer in between. When the parse gate splits between local and CI, compare `sw_vers` first; the Xcode pin doesn't move `assetutil`.
 
 The format is undocumented and Apple is under no obligation to keep it stable. This document and this writer reflect a snapshot of CoreUI 970; treat it as such.
