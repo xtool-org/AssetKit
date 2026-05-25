@@ -2,7 +2,7 @@
 
 This document describes the CoreUI `Assets.car` (Compiled Asset Resource) binary format as emitted by `actool` in Xcode 26 (CoreUI 970, `StorageVersion = 17`, targeting iOS 16+).
 
-It is not a replacement for reading `Sources/XCAssetCompiler/`; it is a companion that explains *why* the bytes are the way they are, with particular attention to six places where the public reverse-engineering writeups (Timac 2018, DBG.RE 2026) describe an older format and would have given wrong values if followed literally. This writer was developed against a freshly dumped `actool` reference rather than from those writeups; the divergences below cost real iteration cycles to discover.
+It is not a replacement for reading `Sources/AssetKit/`; it is a companion that explains *why* the bytes are the way they are, with particular attention to six places where the public reverse-engineering writeups (Timac 2018, DBG.RE 2026) describe an older format and would have given wrong values if followed literally. This writer was developed against a freshly dumped `actool` reference rather than from those writeups; the divergences below cost real iteration cycles to discover.
 
 ## Container
 
@@ -47,7 +47,7 @@ DBG.RE 2026 lists `appearance=6`, `scale=11`, `identifier=15`. CoreUI 970 emits 
 .identifier    = 17
 ```
 
-Implementation: [Sources/XCAssetCompiler/CAR/KeyFormat.swift](../Sources/XCAssetCompiler/CAR/KeyFormat.swift).
+Implementation: [Sources/AssetKit/CAR/KeyFormat.swift](../Sources/AssetKit/CAR/KeyFormat.swift).
 
 If you target a different Xcode version, re-derive these by dumping a fresh `assetutil --info` reference catalog. CoreUI itself binary-searches rendition keys by raw byte comparison, so a single wrong attribute number desyncs the entire lookup.
 
@@ -79,7 +79,7 @@ For raw-bitmap renditions, CoreUI 970 expects a TVL (type-length-value) metadata
 
 Without this section, CoreUI parses the rendition key but cannot materialise the bitmap. `assetutil --info` reports `AssetType: Unknown` and omits `PixelWidth`, `PixelHeight`, `Encoding`, and `Compression`.
 
-Implementation: [Sources/XCAssetCompiler/CAR/CSIWriter.swift](../Sources/XCAssetCompiler/CAR/CSIWriter.swift).
+Implementation: [Sources/AssetKit/CAR/CSIWriter.swift](../Sources/AssetKit/CAR/CSIWriter.swift).
 
 ### 4. iOS uses `UIAppearanceAny` / `UIAppearanceDark` in APPEARANCEKEYS — not the macOS names
 
@@ -92,7 +92,7 @@ Registering only the macOS names produces a catalog where `UIImage(named:)` retu
 
 The `UIAppearanceAny` row (id=0) is always emitted, because every rendition key packs `appearance=0` as the default-variant marker — even in catalogs with no explicit appearance entries. The `UIAppearanceDark` row (id=1) is emitted only when at least one rendition in the catalog declares the dark variant (matches actool's reference: dark-free catalogs omit the row entirely). Each appearance ID is encoded as a single `u16 LE`.
 
-Implementation: [Sources/XCAssetCompiler/CAR/AppearanceKeys.swift](../Sources/XCAssetCompiler/CAR/AppearanceKeys.swift).
+Implementation: [Sources/AssetKit/CAR/AppearanceKeys.swift](../Sources/AssetKit/CAR/AppearanceKeys.swift).
 
 ### 5. `actool` allocates value blocks before key blocks in BOM trees
 
@@ -100,7 +100,7 @@ For BOM trees with separate key/value blocks (most trees other than BITMAPKEYS),
 
 `UIImage(named:)` returns nil if this ordering is reversed. The catalog still parses with `assetutil` because the file structure is valid; iOS's runtime walks the leaf assuming value-first IDs.
 
-Implementation: [Sources/XCAssetCompiler/BOM/BOMTree.swift](../Sources/XCAssetCompiler/BOM/BOMTree.swift).
+Implementation: [Sources/AssetKit/BOM/BOMTree.swift](../Sources/AssetKit/BOM/BOMTree.swift).
 
 ### 6. BITMAPKEYS is required for `UIImage(named:)` resolution
 
@@ -125,7 +125,7 @@ Followed by three trailing `0xFFFFFFFF` sentinels. Total: 52 bytes. The Vector t
 
 The `renditionFlags` field in the CSI header differs correspondingly — bit 4 set for `.image` renditions, bit 2 set for vector renditions, both cleared for `.appIcon`.
 
-Implementation: [Sources/XCAssetCompiler/CAR/BitmapKeys.swift](../Sources/XCAssetCompiler/CAR/BitmapKeys.swift).
+Implementation: [Sources/AssetKit/CAR/BitmapKeys.swift](../Sources/AssetKit/CAR/BitmapKeys.swift).
 
 ## 7. Preserved-source renditions: SVG and JPG via the DWAR envelope
 
@@ -189,7 +189,7 @@ Entries `1001` (bitmap descriptor), `1003` (destination rect), and `1007` (bytes
 | `bitmapCount` | `1` |
 | body | `DWAR(flags=0)` followed by raw JPEG bytes (JFIF / EXIF / SOS markers all included verbatim) |
 
-The TVL section is shaped like the bitmap TVL but with type `1007` (bytes-per-row) omitted — bytes-per-row is a strided-bitmap concept that has no analogue in a JPEG bitstream. The decoded width / height in `1001` and `1003` are populated by walking the JPEG segment chain to SOF0 / SOF1 / SOF2; see [Sources/XCAssetCompiler/Rendition/JPEGDimensions.swift](../Sources/XCAssetCompiler/Rendition/JPEGDimensions.swift).
+The TVL section is shaped like the bitmap TVL but with type `1007` (bytes-per-row) omitted — bytes-per-row is a strided-bitmap concept that has no analogue in a JPEG bitstream. The decoded width / height in `1001` and `1003` are populated by walking the JPEG segment chain to SOF0 / SOF1 / SOF2; see [Sources/AssetKit/Rendition/JPEGSource.swift](../Sources/AssetKit/Rendition/JPEGSource.swift).
 
 | Type | Length | Value |
 |---|---|---|
@@ -214,7 +214,7 @@ JPG renditions sit in the generic-image category at every layer above the CSI bo
 - **APPEARANCEKEYS**: rows emitted on demand — `UIAppearanceAny` always, `UIAppearanceDark` only when at least one rendition declares the dark variant. Each ID is a single `u16 LE`.
 - **KEYFORMAT**, **EXTENDED_METADATA**, **CARHEADER**: unchanged.
 
-Implementation: [Sources/XCAssetCompiler/CAR/CSIWriter.swift](../Sources/XCAssetCompiler/CAR/CSIWriter.swift), [Sources/XCAssetCompiler/Rendition/Rendition.swift](../Sources/XCAssetCompiler/Rendition/Rendition.swift), [Sources/XCAssetCompiler/Rendition/ImageRenderer.swift](../Sources/XCAssetCompiler/Rendition/ImageRenderer.swift).
+Implementation: [Sources/AssetKit/CAR/CSIWriter.swift](../Sources/AssetKit/CAR/CSIWriter.swift), [Sources/AssetKit/Rendition/Rendition.swift](../Sources/AssetKit/Rendition/Rendition.swift), [Sources/AssetKit/Rendition/ImageRenderer.swift](../Sources/AssetKit/Rendition/ImageRenderer.swift).
 
 ### Historical note
 
@@ -250,7 +250,7 @@ xxd /tmp/our-output/Assets.car > /tmp/ours.hex
 diff /tmp/ref.hex /tmp/ours.hex
 ```
 
-The `assetutil` parse gate in [Tests/XCAssetCompilerTests/AssetutilParseTests.swift](../Tests/XCAssetCompilerTests/AssetutilParseTests.swift) automates the most important half of this for the project's CI.
+The `assetutil` parse gate in [Tests/AssetKitTests/AssetutilParseTests.swift](../Tests/AssetKitTests/AssetutilParseTests.swift) automates the most important half of this for the project's CI.
 
 Crash signals like `_swapKeyFormat` are register heuristics from the iOS crash reporter, not diagnoses; treat them as "something is wrong upstream of this point" rather than "this specific function is the bug."
 
