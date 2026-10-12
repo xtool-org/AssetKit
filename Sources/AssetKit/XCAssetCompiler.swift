@@ -98,11 +98,14 @@ public struct XCAssetCompiler: Sendable {
             renditions.append(contentsOf: try ImageRenderer.appIconRenditions(for: appIcon, files: plist.iconFiles))
 
             var looseFiles: [LooseFile] = []
+            var seen: Set<String> = []
             for file in plist.iconFiles {
                 let suffix = file.scale == 1 ? "" : "@\(file.scale)x"
                 let target = "\(file.outputName)\(suffix).png"
-                let data = try Data(contentsOf: file.sourceURL)
-                looseFiles.append(LooseFile(name: target, data: data))
+                // iPhone and iPad entries can share a name (and, when generated, pixels).
+                if seen.insert(target).inserted {
+                    looseFiles.append(LooseFile(name: target, data: file.data))
+                }
             }
 
             appIconBundle = AppIconBundle(
