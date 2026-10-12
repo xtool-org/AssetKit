@@ -45,6 +45,10 @@ struct BitmapBody: Sendable {
     /// 1...6 for 20, 29, 40, 60, 76 and 83.5 points, 8 for the 1024-point store icon.
     /// Matches an actool-built catalog; unused for other kinds.
     var iconIndex: UInt16 = 1
+    /// Rendition key subtype. 0 except for the iPhone 60pt@3x copy actool stores at 1792.
+    var subtype: UInt16 = 0
+    /// App icons: the point size this rendition is for (83.5, 90, 1024...).
+    var iconPoints: Double = 0
     /// The source filename (e.g. "icon@2x.png"). Stored in the CSI header's
     /// 128-char name field; actool uses the filename here, not the asset name.
     var renditionName: String

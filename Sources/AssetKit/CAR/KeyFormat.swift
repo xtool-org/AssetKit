@@ -9,6 +9,7 @@ enum AttributeID: UInt32 {
     case element = 1
     case part = 2
     case appearance = 7
+    case dimension1 = 8
     case dimension2 = 9
     case scale = 12
     case localization = 13
@@ -28,6 +29,21 @@ let v1KeyFormat: [AttributeID] = [
     .idiom,
     .subtype,
     .dimension2,
+    .identifier,
+    .element,
+    .part,
+]
+
+/// The ten-attribute layout actool 26.5 writes: `Dimension1` sits between
+/// `Dimension2` and the identifier. It is always 0 in the renditions we emit.
+let v2KeyFormat: [AttributeID] = [
+    .appearance,
+    .localization,
+    .scale,
+    .idiom,
+    .subtype,
+    .dimension2,
+    .dimension1,
     .identifier,
     .element,
     .part,

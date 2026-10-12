@@ -40,6 +40,8 @@ enum CSIHeader {
         /// category; SVG promotes to its own layout because vector
         /// renditions surface a different AssetType to `assetutil`.
         case vector = 9
+        /// App icon size index ("MSIS" body, part 218).
+        case iconSizes = 1010
     }
 
     // swiftlint:disable:next function_parameter_count

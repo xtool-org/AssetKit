@@ -19,6 +19,10 @@ enum CARHeaderBlock {
     static let defaultMainVersionString = "@(#)PROGRAM:CoreUI  PROJECT:CoreUI-970.1"
     static let defaultVersionString = "xcasset-compiler clean-room CAR writer (Assets.car v1)"
 
+    /// What Xcode 26.5's actool writes (CoreUI 975).
+    static let actoolMainVersionString = "@(#)PROGRAM:CoreUI  PROJECT:CoreUI-975"
+    static let actoolVersionString = "Xcode 26.5 (17F42) via AssetCatalogSimulatorAgent"
+
     static func data(
         coreuiVersion: UInt32 = 970,
         storageVersion: UInt32 = 17,

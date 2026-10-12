@@ -112,6 +112,35 @@ enum CSIWriter {
         return header + tvl + envelope
     }
 
+    /// The app icon size index: which sizes (and icon indexes) exist for one
+    /// idiom / subtype group. `entries` are (width = height in points, icon index).
+    static func iconSizes(name: String, entries: [(points: UInt32, index: UInt32)]) -> Data {
+        var body = ByteWriter()
+        body.writeFourCC("SISM")
+        body.writeLE(UInt32(1))                 // version
+        body.writeLE(UInt32(entries.count))
+        for entry in entries {
+            body.writeLE(entry.points)
+            body.writeLE(entry.points)
+            body.writeLE(entry.index)
+        }
+        let tvl = CSITVL.encode([.sliceScaleZero, .bitmapFlag])
+        let header = CSIHeader.encode(
+            renditionFlags: 0,
+            width: 0,
+            height: 0,
+            scaleFactor: 0,
+            pixelFormat: 0,
+            colorSpace: 0,
+            layout: .iconSizes,
+            name: name,
+            tvlLength: UInt32(tvl.count),
+            bitmapCount: 1,
+            renditionLength: UInt32(body.data.count)
+        )
+        return header + tvl + body.data
+    }
+
     static func color(name: String, body: ColorBody) -> Data {
         let payload = colorBody(body: body)
         let header = CSIHeader.encode(

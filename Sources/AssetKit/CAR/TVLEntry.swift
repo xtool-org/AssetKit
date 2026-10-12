@@ -26,6 +26,9 @@ enum TVLEntry {
     /// Type 1004 (8-byte value): slice/scale pair. Reference is `(0, 1.0f)`.
     case sliceScale
 
+    /// Type 1004 with scale 0: what the app icon size index records carry.
+    case sliceScaleZero
+
     /// Type 1006 (4-byte value): always 1 in the reference. Likely a
     /// bitmap-count / has-mipmap-stages flag.
     case bitmapFlag
@@ -60,6 +63,11 @@ enum TVLEntry {
             w.writeLE(UInt32(8))
             w.writeLE(UInt32(0))
             w.writeLE(UInt32(Float(1).bitPattern))
+        case .sliceScaleZero:
+            w.writeLE(UInt32(1004))
+            w.writeLE(UInt32(8))
+            w.writeLE(UInt32(0))
+            w.writeLE(UInt32(0))
         case .bitmapFlag:
             w.writeLE(UInt32(1006))
             w.writeLE(UInt32(4))

@@ -59,7 +59,11 @@ enum ImageRenderer {
         return out
     }
 
-    static func appIconRenditions(for appIcon: LoadedAppIcon, files: [IconFile]) throws -> [Rendition] {
+    static func appIconRenditions(
+        for appIcon: LoadedAppIcon,
+        files: [IconFile],
+        options: OutputOptions = .legacy
+    ) throws -> [Rendition] {
         var out: [Rendition] = []
         for file in files {
             let filename = file.sourceName
@@ -93,10 +97,26 @@ enum ImageRenderer {
             for i in renditions.indices {
                 if case .bitmap(var body) = renditions[i].body {
                     body.iconIndex = iconIndex(idiom: file.idiom, pointSize: file.pointSize)
+                    body.iconPoints = file.pointSize
                     renditions[i].body = .bitmap(body)
                 }
             }
             out.append(contentsOf: renditions)
+            // actool also stores the iPhone 60pt@3x icon as a 2x rendition at
+            // subtype 1792 (an iPhone 6 Plus class display that scales 3x down
+            // to 2x), with 90pt, i.e. 1.5x of 60, as its size.
+            if options.contains(.multisizeIcons), file.idiom == .iphone, file.pointSize == 60, file.scale == 3 {
+                for var copy in renditions {
+                    copy.scale = .x2
+                    if case .bitmap(var body) = copy.body {
+                        body.subtype = 1792
+                        body.iconIndex = 7
+                        body.iconPoints = 90
+                        copy.body = .bitmap(body)
+                    }
+                    out.append(copy)
+                }
+            }
         }
         return out
     }

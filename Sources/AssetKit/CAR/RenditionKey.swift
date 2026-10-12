@@ -13,6 +13,8 @@ struct RenditionKey: Hashable, Sendable {
     var idiom: UInt16
     var subtype: UInt16
     var dimension2: UInt16
+    /// Only encoded with the ten-attribute key format.
+    var dimension1: UInt16 = 0
     var identifier: UInt16
     var element: UInt16
     var part: UInt16
@@ -36,17 +38,21 @@ struct RenditionKey: Hashable, Sendable {
         /// rather than `image`; bitmap variants rasterised from the SVG
         /// (which `UIImage(named:)` actually returns) live under `image`.
         case vectorSource = 42
+        /// App icon "multisize image set" index: lists the sizes of one
+        /// (idiom, subtype) group. Carries no pixels.
+        case iconSizes = 218
     }
 
-    init(rendition: Rendition) {
+    init(rendition: Rendition, options: OutputOptions = .legacy) {
         self.appearance = (rendition.appearance?.darkLuminosity == true) ? 1 : 0
         self.localization = 0
         self.scale = rendition.scale?.rawValueByte ?? 0
         self.idiom = rendition.idiom.rawValueByte
         self.subtype = 0
-        self.identifier = UInt16(FacetKeys.nameHash(rendition.name) & 0xFFFF)
+        self.identifier = FacetKeys.identifier(for: rendition.name, options: options)
         switch rendition.body {
         case .bitmap(let body):
+            self.subtype = body.subtype
             self.element = Element.bitmap.rawValue
             switch body.kind {
             case .appIcon:
@@ -103,7 +109,7 @@ struct RenditionKey: Hashable, Sendable {
         self.part = part
     }
 
-    func encode() -> Data {
+    func encode(withDimension1: Bool = false) -> Data {
         var w = ByteWriter()
         w.writeLE(appearance)
         w.writeLE(localization)
@@ -111,6 +117,7 @@ struct RenditionKey: Hashable, Sendable {
         w.writeLE(idiom)
         w.writeLE(subtype)
         w.writeLE(dimension2)
+        if withDimension1 { w.writeLE(dimension1) }
         w.writeLE(identifier)
         w.writeLE(element)
         w.writeLE(part)
