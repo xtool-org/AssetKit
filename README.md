@@ -38,6 +38,7 @@ if let bundle = result.appIconBundle {
   - JPG sources stored as preserved raw renditions (JPEG bytes passed through; original compression preserved)
 - `.colorset` (sRGB and display-P3, hex or float components, dark/light appearances)
 - `.appiconset` (per-idiom and per-size, with the loose-PNG fallback that SpringBoard expects alongside `Assets.car`). PNG sources only; SVG/JPG are rejected because SpringBoard's icon-render pipeline requires PNG.
+  - Single-size icons (Xcode 14+: one 1024x1024 `universal` / `platform: ios` entry): the iPhone, iPad and Settings/Spotlight/notification sizes are generated from the master by area-averaged downscaling, and the master is kept as the store icon. The master must be exactly 1024x1024. Dark and tinted (iOS 18) entries are skipped: the default icon is used for every appearance.
 
 ## What it deliberately doesn't support
 

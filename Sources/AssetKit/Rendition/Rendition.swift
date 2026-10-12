@@ -41,6 +41,10 @@ struct BitmapBody: Sendable {
     /// classification (e.g. when re-rasterising via the preserved vector
     /// source at a non-intrinsic size). PNG / appicon bitmaps leave it false.
     var derivedFromVector: Bool = false
+    /// App icon sizes are told apart by the key's dimension2 slot (the "icon index"):
+    /// 1...6 for 20, 29, 40, 60, 76 and 83.5 points, 8 for the 1024-point store icon.
+    /// Matches an actool-built catalog; unused for other kinds.
+    var iconIndex: UInt16 = 1
     /// The source filename (e.g. "icon@2x.png"). Stored in the CSI header's
     /// 128-char name field; actool uses the filename here, not the asset name.
     var renditionName: String

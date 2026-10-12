@@ -62,11 +62,11 @@ enum ImageRenderer {
     static func appIconRenditions(for appIcon: LoadedAppIcon, files: [IconFile]) throws -> [Rendition] {
         var out: [Rendition] = []
         for file in files {
-            let filename = file.sourceURL.lastPathComponent
+            let filename = file.sourceName
             guard SourceFormat.detect(filename: filename) == .png else {
                 throw XCAssetCompilerError.unsupportedAppIconSource(asset: appIcon.name, filename: filename)
             }
-            let bytes = try Data(contentsOf: file.sourceURL)
+            let bytes = file.data
             let scale: Scale = {
                 switch file.scale {
                 case 1: return .x1
@@ -89,8 +89,29 @@ enum ImageRenderer {
                 filename: filename,
                 kind: .appIcon
             )
-            out.append(contentsOf: try PNGSource.renditions(bytes: bytes, context: ctx))
+            var renditions = try PNGSource.renditions(bytes: bytes, context: ctx)
+            for i in renditions.indices {
+                if case .bitmap(var body) = renditions[i].body {
+                    body.iconIndex = iconIndex(idiom: file.idiom, pointSize: file.pointSize)
+                    renditions[i].body = .bitmap(body)
+                }
+            }
+            out.append(contentsOf: renditions)
         }
         return out
+    }
+
+    /// See `BitmapBody.iconIndex`.
+    private static func iconIndex(idiom: Idiom, pointSize: Double) -> UInt16 {
+        if idiom == .marketing { return 8 }
+        switch pointSize {
+        case 20: return 1
+        case 29: return 2
+        case 40: return 3
+        case 60: return 4
+        case 76: return 5
+        case 83.5: return 6
+        default: return 1
+        }
     }
 }
