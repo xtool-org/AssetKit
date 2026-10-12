@@ -72,8 +72,10 @@ public struct OutputOptions: OptionSet, Sendable {
     /// Ten-attribute `KEYFORMAT` with `Dimension1`, a matching slot in every
     /// rendition key, and the matching `BITMAPKEYS` descriptor size.
     public static let dimension1Key = OutputOptions(rawValue: 1 << 0)
-    /// CoreUI 975 and Xcode 26.5 identification strings in `CARHEADER` and
-    /// `EXTENDED_METADATA`.
+    /// Tool mimicry, off by default: CoreUI 975 and the Xcode 26.5 tool strings
+    /// in `CARHEADER` and `EXTENDED_METADATA`, which claim the file was
+    /// written by Xcode's actool. Only useful to test whether a consumer
+    /// checks them; by default the header names AssetKit.
     public static let actoolVersionStrings = OutputOptions(rawValue: 1 << 1)
     /// The app icon "multisize" index records (part 218), the extra
     /// iPhone 60pt@3x rendition actool stores at subtype 1792, and
@@ -85,9 +87,10 @@ public struct OutputOptions: OptionSet, Sendable {
 
     /// The original output of this library.
     public static let legacy: OutputOptions = []
-    public static let actool26_5: OutputOptions = [
-        .dimension1Key, .actoolVersionStrings, .multisizeIcons, .actoolIdentifiers,
-    ]
+    /// The structure of actool 26.5's output, without claiming to be it.
+    public static let actoolStructure: OutputOptions = [.dimension1Key, .multisizeIcons, .actoolIdentifiers]
+    /// Everything, including the tool strings.
+    public static let actool26_5: OutputOptions = actoolStructure.union(.actoolVersionStrings)
 }
 
 public struct XCAssetCompiler: Sendable {
@@ -102,7 +105,7 @@ public struct XCAssetCompiler: Sendable {
     public init(
         deploymentTarget: String,
         svgRasterizer: any SVGRasterizer = RsvgConvertRasterizer(),
-        options: OutputOptions = .actool26_5
+        options: OutputOptions = .actoolStructure
     ) {
         self.deploymentTarget = deploymentTarget
         self.svgRasterizer = svgRasterizer

@@ -18,8 +18,11 @@ struct CandidateGeneratorTests {
             ("cand-1-keyformat", [.dimension1Key], icons),
             ("cand-2-header", [.dimension1Key, .actoolVersionStrings], icons),
             ("cand-3-multisize", [.dimension1Key, .actoolVersionStrings, .multisizeIcons], icons),
+            ("cand-3b-multisize-honest", [.dimension1Key, .multisizeIcons], icons),
             ("cand-4-identifier", .actool26_5, icons),
+            ("cand-4b-identifier-honest", .actoolStructure, icons),
             ("cand-5-with-launch-background", .actool26_5, full),
+            ("cand-5b-launch-background-honest", .actoolStructure, full),
         ]
         for (name, options, catalog) in steps {
             let result = try await XCAssetCompiler(deploymentTarget: "17.0", options: options).compile(catalog: catalog)

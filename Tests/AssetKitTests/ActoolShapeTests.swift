@@ -69,9 +69,24 @@ struct ActoolShapeTests {
         #expect(String(decoding: metadata, as: UTF8.self).contains("CoreThemeDefinition-653.4"))
     }
 
+    @Test("The default does not claim to be Xcode")
+    func defaultIsHonest() async throws {
+        let catalog = try makeCatalog()
+        defer { try? FileManager.default.removeItem(at: catalog) }
+        let result = try await XCAssetCompiler(deploymentTarget: "17.0").compile(catalog: catalog)
+        let car = CARInspector(result.carData)
+        let header = try #require(car.header)
+        #expect(header.coreUI == 970)
+        #expect(header.version == "AssetKit")
+        #expect(car.keyFormat.count == 10)
+        #expect(car.renditions.contains { $0.key[9] == 218 })
+        let metadata = try #require(car.variable("EXTENDED_METADATA"))
+        #expect(!String(decoding: metadata, as: UTF8.self).contains("Xcode"))
+    }
+
     @Test("Full actool shape: size index records, subtype 1792 copy, masks, AppIcon identifier")
     func fullShape() async throws {
-        let car = try await compile(.actool26_5)
+        let car = try await compile(.actoolStructure)
         let renditions = car.renditions
         // 15 files + the 60pt@3x copy + 4 index records (iPhone, iPhone 1792, iPad, store)
         #expect(renditions.count == 20)

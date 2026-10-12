@@ -17,7 +17,7 @@ enum CARHeaderBlock {
     /// `assetutil --info` and Xcode-side tooling display them without
     /// surprises.
     static let defaultMainVersionString = "@(#)PROGRAM:CoreUI  PROJECT:CoreUI-970.1"
-    static let defaultVersionString = "xcasset-compiler clean-room CAR writer (Assets.car v1)"
+    static let defaultVersionString = "AssetKit"
 
     /// What Xcode 26.5's actool writes (CoreUI 975).
     static let actoolMainVersionString = "@(#)PROGRAM:CoreUI  PROJECT:CoreUI-975"
