@@ -8,12 +8,11 @@ import Foundation
 /// - `numberOfAttributes u16`
 /// - array of `(attributeName u16, attributeValue u16)`
 enum FacetKeys {
-    static func value(for name: String, kind: Kind) -> Data {
+    static func value(for name: String, kind: Kind, options: OutputOptions = .legacy) -> Data {
         var w = ByteWriter()
         w.writeLE(UInt16(0))            // cursorHotSpotX
         w.writeLE(UInt16(0))            // cursorHotSpotY
-        let crc = nameHash(name)
-        let identifier = UInt16(crc & 0xFFFF)
+        let identifier = identifier(for: name, options: options)
         let pairs = kind.pairs(identifier: identifier)
         w.writeLE(UInt16(pairs.count))
         for (attrName, attrValue) in pairs {
@@ -49,6 +48,20 @@ enum FacetKeys {
             }
         }
     }
+
+    /// The 16-bit NameIdentifier used in FACETKEYS and rendition keys.
+    ///
+    /// actool's hash is unknown; CRC32 truncated to 16 bits only has to be
+    /// consistent between the two trees. The one value observed in an actool
+    /// catalog (`AppIcon` -> 6849) is reproduced when asked for.
+    static func identifier(for name: String, options: OutputOptions) -> UInt16 {
+        if options.contains(.actoolIdentifiers), let known = actoolIdentifiers[name] {
+            return known
+        }
+        return UInt16(nameHash(name) & 0xFFFF)
+    }
+
+    private static let actoolIdentifiers: [String: UInt16] = ["AppIcon": 6849]
 
     /// CRC32 (IEEE) of the asset name, truncated to 16 bits for the identifier slot.
     static func nameHash(_ name: String) -> UInt32 {

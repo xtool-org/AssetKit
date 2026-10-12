@@ -23,6 +23,11 @@ enum BitmapKeys {
         var kind: Kind
         /// Number of distinct (idiom, subtype) tuples this asset is keyed on.
         var idiomSubtypeCount: UInt32
+        /// With `dimension1Key`: the descriptor covers ten key attributes.
+        var withDimension1 = false
+        /// With `multisizeIcons`: bitmask of idioms (bit n = idiom n) and of
+        /// dimension2 values present, as actool writes them.
+        var masks: (idioms: UInt32, dimension2: UInt32)?
 
         enum Kind {
             case appIcon
@@ -48,8 +53,9 @@ enum BitmapKeys {
             var w = ByteWriter()
             w.writeLE(UInt32(1))
             w.writeLE(UInt32(0))
-            w.writeLE(UInt32(0x28))
-            w.writeLE(UInt32(9))
+            let attributeCount: UInt32 = withDimension1 ? 10 : 9
+            w.writeLE(attributeCount * 4 + 4)
+            w.writeLE(attributeCount)
             w.writeLE(UInt32(0xFFFFFFFF))
             w.writeLE(UInt32(1))
             w.writeLE(assetKindMarker)
@@ -61,31 +67,36 @@ enum BitmapKeys {
             // v1 we hardcode the templates per kind and pass through the
             // discovered (idiom, subtype) count. Field 7 in particular seems
             // to track that count.
-            w.writeLE(idiomSubtypeCount)
+            w.writeLE(masks?.idioms ?? idiomSubtypeCount)
             switch kind {
             case .appIcon:
                 w.writeLE(UInt16(1))            // (u16, u16) tuple
                 w.writeLE(UInt16(1))
-                w.writeLE(UInt32(7))
+                w.writeLE(masks?.dimension2 ?? UInt32(7))
             case .image, .vector:
                 w.writeLE(UInt16(1))
                 w.writeLE(UInt16(0))
-                w.writeLE(UInt32(1))
+                w.writeLE(masks?.dimension2 ?? UInt32(1))
             }
+            // Dimension1 is always 0: a mask with only bit 0.
+            if withDimension1 { w.writeLE(UInt32(1)) }
             // Three trailing -1 sentinels.
             w.writeLE(UInt32(0xFFFFFFFF))
             w.writeLE(UInt32(0xFFFFFFFF))
             w.writeLE(UInt32(0xFFFFFFFF))
-            precondition(w.offset == 52, "BITMAPKEYS descriptor must be 52 bytes; got \(w.offset)")
+            precondition(w.offset == (withDimension1 ? 56 : 52), "BITMAPKEYS descriptor has the wrong size: \(w.offset)")
             return w.data
         }
     }
 
     /// Per-asset BITMAPKEYS entry: `(NameIdentifier, descriptor bytes)`.
-    static func entries(for assets: [(name: String, descriptor: Descriptor)]) -> [BOMTree.InlineKeyEntry] {
+    static func entries(
+        for assets: [(name: String, descriptor: Descriptor)],
+        options: OutputOptions = .legacy
+    ) -> [BOMTree.InlineKeyEntry] {
         return assets.map { asset in
             BOMTree.InlineKeyEntry(
-                key: FacetKeys.nameHash(asset.name) & 0xFFFF,
+                key: UInt32(FacetKeys.identifier(for: asset.name, options: options)),
                 value: asset.descriptor.encode()
             )
         }
@@ -97,7 +108,11 @@ enum BitmapKeys {
     /// `renditions` is the per-asset slice -- only the renditions whose
     /// `name` equals this asset's name. Caller is responsible for the
     /// grouping; this function does not re-filter.
-    static func descriptor(forAsset name: String, renditions: [Rendition]) -> Descriptor? {
+    static func descriptor(
+        forAsset name: String,
+        renditions: [Rendition],
+        options: OutputOptions = .legacy
+    ) -> Descriptor? {
         let hasBitmapOrPreservedSource = renditions.contains { rendition in
             switch rendition.body {
             case .bitmap, .preservedSource: return true
@@ -118,7 +133,20 @@ enum BitmapKeys {
             return (idiom << 16) | subtype
         })
 
-        return Descriptor(kind: kind, idiomSubtypeCount: UInt32(idiomSubtypes.count))
+        var descriptor = Descriptor(kind: kind, idiomSubtypeCount: UInt32(idiomSubtypes.count))
+        descriptor.withDimension1 = options.contains(.dimension1Key)
+        if options.contains(.multisizeIcons) {
+            var idioms: UInt32 = 0
+            var dimension2: UInt32 = 0
+            for rendition in renditions {
+                idioms |= 1 << UInt32(rendition.idiom.rawValueByte)
+                dimension2 |= 1 << UInt32(RenditionKey(rendition: rendition).dimension2)
+            }
+            // the size index records are keyed with dimension2 = 0
+            if kind == .appIcon { dimension2 |= 1 }
+            descriptor.masks = (idioms, dimension2)
+        }
+        return descriptor
     }
 
     /// AppIcon takes precedence over Vector takes precedence over Image:

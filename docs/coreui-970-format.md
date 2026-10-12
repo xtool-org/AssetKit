@@ -238,6 +238,30 @@ This writer's `NameIdentifier` is `CRC32-IEEE(name) & 0xFFFF`, whereas `actool`'
 
 Imagesets have no such fallback. This is why divergences #4-6 above gate `UIImage(named:)` for image assets — there's no second chance.
 
+## App icons: what actool emits, and what is still unverified
+
+Observed in a catalog compiled by Xcode 26.5 from a multi-size `.appiconset` (iPhone and iPad 20/29/40/60/76/83.5 pt plus a 1024 px store icon), dumped without `assetutil`:
+
+- One bitmap rendition (`element=85`, `part=220`) per source file, named after the file (`AppIcon-60x60@2x.png`), not after the set.
+- The `dimension2` slot is the icon index: 1, 2, 3, 4, 5, 6 for 20, 29, 40, 60, 76, 83.5 pt, and 8 for the store icon (`idiom=6`, `ios-marketing`). This writer follows that mapping, so icons of the same idiom and scale no longer collide on one key.
+- Additional `part=218` records named `AppIcon` with no pixel data (one per scale / idiom / subtype). This writer does not emit them.
+- The loose PNGs next to `Assets.car` are only `AppIcon60x60@2x.png` and `AppIcon76x76@2x~ipad.png`, with `CFBundleIconFiles` limited to those names plus `CFBundleIconName`. This writer emits every size, without the `~ipad` suffix.
+- That catalog's `KEYFORMAT` has ten tokens (attribute 8 sits between `dimension2` and `identifier`), against nine here.
+
+Single-size icons (`{"platform": "ios", "size": "1024x1024"}`) are handled by generating the same per-size set from the master (area-averaged downscale), then going through the multi-size path. Whether actool emits the same renditions for a single-size source (it probably does, for the sizes the deployment target needs) has not been checked against actool output. Dark and tinted entries are skipped.
+
+To settle it on a Mac, compile a single-size catalog and compare:
+
+```sh
+xcrun actool --compile out --platform iphoneos --minimum-deployment-target 17.0 \
+  --app-icon AppIcon --output-partial-info-plist out/partial.plist \
+  --output-format human-readable-text Single.xcassets
+xcrun assetutil --info out/Assets.car | jq '.[] | {Name, RenditionName, Idiom, Scale, Appearance, PixelWidth}'
+cat out/partial.plist; ls out
+```
+
+Run it once with the default icon only and once with dark and tinted images added, and compare the rendition list, `Appearance` values and the partial plist with this writer's output.
+
 ## Workflow: generating a fresh `actool` reference
 
 When changing any CoreUI block-emitting code (`CAR/*.swift`, `BOM/*.swift`), the durable safety net is to generate a reference Assets.car with `actool` and compare bytes.

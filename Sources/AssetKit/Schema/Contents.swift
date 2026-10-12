@@ -104,12 +104,29 @@ struct ImageSetContents: Codable, Sendable {
 
 struct AppIconContents: Codable, Sendable {
     struct Image: Codable, Sendable {
+        /// Absent in the single-size format Xcode 14+ writes
+        /// (`{"platform": "ios", "size": "1024x1024"}`); decoded as `.universal`.
         var idiom: Idiom
         var size: String
         var scale: Scale?
         var filename: String?
         var role: String?
         var subtype: String?
+        var platform: String?
+        /// Dark / tinted variants (iOS 18+). Absent for the default ("Any") icon.
+        var appearances: [Appearance]?
+
+        init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            idiom = try c.decodeIfPresent(Idiom.self, forKey: .idiom) ?? .universal
+            size = try c.decode(String.self, forKey: .size)
+            scale = try c.decodeIfPresent(Scale.self, forKey: .scale)
+            filename = try c.decodeIfPresent(String.self, forKey: .filename)
+            role = try c.decodeIfPresent(String.self, forKey: .role)
+            subtype = try c.decodeIfPresent(String.self, forKey: .subtype)
+            platform = try c.decodeIfPresent(String.self, forKey: .platform)
+            appearances = try c.decodeIfPresent([Appearance].self, forKey: .appearances)
+        }
 
         var pointSize: (Double, Double)? {
             let parts = size.split(separator: "x")
@@ -117,6 +134,12 @@ struct AppIconContents: Codable, Sendable {
                   let w = Double(parts[0]),
                   let h = Double(parts[1]) else { return nil }
             return (w, h)
+        }
+
+        /// A single 1024x1024 master that actool expands into every size the
+        /// target needs: universal idiom, no scale (or 1x), no appearance.
+        var isSingleSizeMaster: Bool {
+            idiom == .universal && (scale ?? .x1) == .x1 && pointSize.map { $0 == (1024, 1024) } == true
         }
     }
     var images: [Image]

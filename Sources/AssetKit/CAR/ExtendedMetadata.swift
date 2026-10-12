@@ -16,7 +16,10 @@ import Foundation
 /// platform match recorded here.
 enum ExtendedMetadata {
     static let defaultPlatform = "ios"
-    static let defaultAuthoringTool = "xcasset-compiler clean-room CAR writer (Assets.car v1)"
+    static let defaultAuthoringTool = "AssetKit"
+
+    static let actoolAuthoringTool =
+        "@(#)PROGRAM:CoreThemeDefinition  PROJECT:CoreThemeDefinition-653.4  [IIO-2784.5.4]"
 
     static func data(
         deploymentTarget: String,

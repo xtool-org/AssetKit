@@ -60,6 +60,39 @@ public struct LooseFile: Sendable {
     }
 }
 
+/// Where the output departs from the minimal CoreUI 970 shape this library
+/// first shipped, to look like what Xcode 26.5's actool writes. App Store
+/// Connect leaves an upload in processing forever for an `Assets.car` it
+/// cannot read, so each difference is individually switchable while it is
+/// being narrowed down.
+public struct OutputOptions: OptionSet, Sendable {
+    public let rawValue: Int
+    public init(rawValue: Int) { self.rawValue = rawValue }
+
+    /// Ten-attribute `KEYFORMAT` with `Dimension1`, a matching slot in every
+    /// rendition key, and the matching `BITMAPKEYS` descriptor size.
+    public static let dimension1Key = OutputOptions(rawValue: 1 << 0)
+    /// Tool mimicry, off by default: CoreUI 975 and the Xcode 26.5 tool strings
+    /// in `CARHEADER` and `EXTENDED_METADATA`, which claim the file was
+    /// written by Xcode's actool. Only useful to test whether a consumer
+    /// checks them; by default the header names AssetKit.
+    public static let actoolVersionStrings = OutputOptions(rawValue: 1 << 1)
+    /// The app icon "multisize" index records (part 218), the extra
+    /// iPhone 60pt@3x rendition actool stores at subtype 1792, and
+    /// `BITMAPKEYS` idiom / icon-index masks.
+    public static let multisizeIcons = OutputOptions(rawValue: 1 << 2)
+    /// The `NameIdentifier` actool computes for `AppIcon` (6849) instead of
+    /// the CRC32-based one used for other names.
+    public static let actoolIdentifiers = OutputOptions(rawValue: 1 << 3)
+
+    /// The original output of this library.
+    public static let legacy: OutputOptions = []
+    /// The structure of actool 26.5's output, without claiming to be it.
+    public static let actoolStructure: OutputOptions = [.dimension1Key, .multisizeIcons, .actoolIdentifiers]
+    /// Everything, including the tool strings.
+    public static let actool26_5: OutputOptions = actoolStructure.union(.actoolVersionStrings)
+}
+
 public struct XCAssetCompiler: Sendable {
     public var deploymentTarget: String
     /// Strategy used to rasterise `.svg` sources to PNG bytes. Defaults to
@@ -67,13 +100,16 @@ public struct XCAssetCompiler: Sendable {
     /// when you need a different rasteriser (no PATH dep, different
     /// performance profile, sandbox restrictions, etc).
     public var svgRasterizer: any SVGRasterizer
+    public var options: OutputOptions
 
     public init(
         deploymentTarget: String,
-        svgRasterizer: any SVGRasterizer = RsvgConvertRasterizer()
+        svgRasterizer: any SVGRasterizer = RsvgConvertRasterizer(),
+        options: OutputOptions = .actoolStructure
     ) {
         self.deploymentTarget = deploymentTarget
         self.svgRasterizer = svgRasterizer
+        self.options = options
     }
 
     public func compile(catalog catalogURL: URL) async throws -> CompileResult {
@@ -95,14 +131,21 @@ public struct XCAssetCompiler: Sendable {
         var appIconBundle: AppIconBundle?
         if let appIcon = loaded.appIcon {
             let plist = try AppIconPlistEmitter.emit(appIcon)
-            renditions.append(contentsOf: try ImageRenderer.appIconRenditions(for: appIcon, files: plist.iconFiles))
+            renditions.append(contentsOf: try ImageRenderer.appIconRenditions(
+                for: appIcon,
+                files: plist.iconFiles,
+                options: options
+            ))
 
             var looseFiles: [LooseFile] = []
+            var seen: Set<String> = []
             for file in plist.iconFiles {
                 let suffix = file.scale == 1 ? "" : "@\(file.scale)x"
                 let target = "\(file.outputName)\(suffix).png"
-                let data = try Data(contentsOf: file.sourceURL)
-                looseFiles.append(LooseFile(name: target, data: data))
+                // iPhone and iPad entries can share a name (and, when generated, pixels).
+                if seen.insert(target).inserted {
+                    looseFiles.append(LooseFile(name: target, data: file.data))
+                }
             }
 
             appIconBundle = AppIconBundle(
@@ -112,7 +155,7 @@ public struct XCAssetCompiler: Sendable {
             )
         }
 
-        let writer = CARWriter(deploymentTarget: deploymentTarget, renditions: renditions)
+        let writer = CARWriter(deploymentTarget: deploymentTarget, renditions: renditions, options: options)
         let bytes = try writer.write()
 
         return CompileResult(carData: bytes, appIconBundle: appIconBundle)
