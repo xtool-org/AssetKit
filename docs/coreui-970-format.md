@@ -230,6 +230,53 @@ Implementation: [Sources/AssetKit/CAR/CSIWriter.swift](../Sources/AssetKit/CAR/C
 
 Older Xcode releases (11 through 13 era) converted SVG to PDF internally and stored the PDF stream as a CoreUI vector rendition body. Modern actool no longer does the PDF round-trip: it stores the SVG XML directly, LZFSE-compressed inside the DWAR envelope. Anything you may have read about `preserves-vector-representation` triggering an SVG-to-PDF intermediate is the older shape.
 
+## tvOS Brand Assets
+
+The explicit tvOS compiler path writes deployment platform `atv` and uses
+`Dimension1` (attribute 8) in the sixth key slot. The default iOS path keeps its
+existing `Dimension2` (attribute 9) key format. These are platform-specific
+choices, not interchangeable names for the same attribute.
+
+The tvOS stack format was compared with the `Assets.car` in the public
+[Provenance 3.3.0 tvOS release](https://github.com/Provenance-Emu/Provenance/releases/tag/3.3.0).
+Its header identifies CoreUI 969, storage version 17, and Xcode 26.0. No source
+artwork or compiled catalog from that release is bundled here.
+
+The primary facet is named for the small stack, not the `.brandassets` folder.
+It contains a universal 400×240 LayerStack descriptor and, when supplied, a
+marketing-idiom 1280×768 descriptor. The small stack's child images use the TV
+idiom; the marketing children use the marketing idiom. Each layer has its own
+qualified facet, such as `App Icon - Small/Back/Content`. The descriptor references
+those facets in back-to-front order, retaining the source's separate layers.
+
+The observed stock two-layer CSI descriptor is 470 bytes:
+
+- The 184-byte CSI header uses layout 1002, pixel format `DATA`, scale 100,
+  and the rendition name `Contents.json`.
+- Its 274-byte TVL block contains tags 1012, 1020, 1021, 1004, 1005, and 1006.
+- Tag 1012 carries the layer references, dimensions, and stock rendering values.
+  Its facet identifiers are derived from the emitted child names so each link
+  resolves within the new catalog.
+- Tags 1020 and 1021 preserve the observed stock two-layer values. Their other
+  semantics are not inferred, and custom geometry and other layer counts are
+  rejected.
+- The UTI is `public.layeredimage`; the body is an empty, uncompressed DWAR
+  envelope.
+
+The tvOS `BITMAPKEYS` descriptor's slots 6 and 7 are scale and idiom bitmasks,
+derived from the actual emitted key values. For the reference primary facet,
+scales 1 and 2 give `0x06`; idioms 0, 3, and 6 give `0x49`. Child layer and
+Top Shelf descriptors independently corroborate these masks. The tvOS writer
+computes them rather than reusing the fixed iOS templates described above.
+The existing iOS output is retained in this change.
+
+The same facet also carries separately composited previews at part 208, layout
+0. They use premultiplied front-over-back compositing and LZFSE bitmap payloads.
+The reference additionally contains larger, blurred radiosity images at part
+209. That undocumented codec and its runtime requirements have not been
+established here. Matching the descriptor and parsing the catalog are separate
+from verifying tvOS icon loading and focus effects on an Apple TV.
+
 ## SpringBoard fallback (loose-PNG escape hatch)
 
 The library emits loose PNGs into the bundle root alongside `Assets.car`, named per `CFBundleIconFiles` (e.g. `AppIcon60x60@2x.png`). These are not redundant with the CAR-embedded renditions — they exist because SpringBoard's home-screen icon-render pipeline uses the loose-PNG fallback whenever CoreUI's rendition lookup misses.

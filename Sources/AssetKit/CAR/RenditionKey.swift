@@ -36,6 +36,7 @@ struct RenditionKey: Hashable, Sendable {
         /// rather than `image`; bitmap variants rasterised from the SVG
         /// (which `UIImage(named:)` actually returns) live under `image`.
         case vectorSource = 42
+        case layerStackPreview = 208
     }
 
     init(rendition: Rendition) {
@@ -59,6 +60,9 @@ struct RenditionKey: Hashable, Sendable {
                 self.part = Part.image.rawValue
                 // Generic image assets don't use Dimension2 at all.
                 self.dimension2 = 0
+            case .layerStackPreview:
+                self.part = Part.layerStackPreview.rawValue
+                self.dimension2 = 0
             }
         case .color:
             self.element = 0
@@ -79,6 +83,10 @@ struct RenditionKey: Hashable, Sendable {
                 // resulting bitmap from UIImage(named:).
                 self.part = Part.image.rawValue
             }
+        case .layerStack:
+            self.element = Element.bitmap.rawValue
+            self.part = Part.image.rawValue
+            self.dimension2 = 0
         }
     }
 

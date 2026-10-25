@@ -9,6 +9,7 @@ enum AttributeID: UInt32 {
     case element = 1
     case part = 2
     case appearance = 7
+    case dimension1 = 8
     case dimension2 = 9
     case scale = 12
     case localization = 13
@@ -28,6 +29,18 @@ let v1KeyFormat: [AttributeID] = [
     .idiom,
     .subtype,
     .dimension2,
+    .identifier,
+    .element,
+    .part,
+]
+
+let tvKeyFormat: [AttributeID] = [
+    .appearance,
+    .localization,
+    .scale,
+    .idiom,
+    .subtype,
+    .dimension1,
     .identifier,
     .element,
     .part,

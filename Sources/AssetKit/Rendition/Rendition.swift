@@ -5,6 +5,7 @@ struct Rendition: Sendable {
         case bitmap(BitmapBody)
         case color(ColorBody)
         case preservedSource(PreservedSourceBody)
+        case layerStack(LayerStackBody)
     }
 
     var name: String
@@ -13,6 +14,13 @@ struct Rendition: Sendable {
     var appearance: Appearance?
     var gamut: Gamut?
     var body: Body
+}
+
+struct LayerStackBody: Sendable {
+    var width: UInt32
+    var height: UInt32
+    var backgroundName: String
+    var foregroundName: String
 }
 
 struct BitmapBody: Sendable {
@@ -27,6 +35,7 @@ struct BitmapBody: Sendable {
         /// `element=85, part=181`. Used by UIImage(named:) for generic image
         /// assets from an `.imageset`.
         case image
+        case layerStackPreview
     }
 
     var width: UInt32

@@ -15,14 +15,15 @@ import Foundation
 /// resolve correctly. SpringBoard's appicon-render path does NOT depend on
 /// BITMAPKEYS (the home icon still renders via the loose-PNG fallback).
 enum BitmapKeys {
-    /// The 52-byte descriptor. Layout was derived by diffing actool's outputs
-    /// for `.appiconset` vs `.imageset` (bitmap) vs `.imageset` (vector)
-    /// renditions. The first 7 u32s are header-like; only slot 6 varies
-    /// across asset kinds. The remaining 6 vary by asset kind.
+    /// The 52-byte descriptor. The tvOS reference identifies slots 6 and 7
+    /// as masks of the emitted scale and idiom key values. Existing iOS
+    /// templates are retained separately to preserve their output.
     struct Descriptor {
         var kind: Kind
-        /// Number of distinct (idiom, subtype) tuples this asset is keyed on.
+        /// The original iOS template's (idiom, subtype) tuple count.
         var idiomSubtypeCount: UInt32
+        var scaleMask: UInt32 = 0
+        var idiomMask: UInt32 = 0
 
         enum Kind {
             case appIcon
@@ -32,19 +33,16 @@ enum BitmapKeys {
             case vector
         }
 
-        /// Slot 6 of the header (the only header u32 that varies by kind).
-        /// `0x04` for bitmap-source assets (PNG, JPG); `0x0e` for vector
-        /// sources (SVG). AppIcon keeps `0x0e` -- we have no reference dump
-        /// for appicon-only catalogs to confirm which value it expects, and
-        /// the current value is verified end-to-end on device.
-        private var assetKindMarker: UInt32 {
+        /// Preserve the original iOS template values in this tvOS change.
+        /// The tvOS path derives its scale mask from actual rendition keys.
+        private var legacyScaleMask: UInt32 {
             switch kind {
             case .image: return 0x04
             case .vector, .appIcon: return 0x0e
             }
         }
 
-        func encode() -> Data {
+        func encode(platform: XCAssetCompiler.Platform = .iOS) -> Data {
             var w = ByteWriter()
             w.writeLE(UInt32(1))
             w.writeLE(UInt32(0))
@@ -52,22 +50,24 @@ enum BitmapKeys {
             w.writeLE(UInt32(9))
             w.writeLE(UInt32(0xFFFFFFFF))
             w.writeLE(UInt32(1))
-            w.writeLE(assetKindMarker)
-            // Variable section. Values come from the actool reference.
+            w.writeLE(platform == .tvOS ? scaleMask : legacyScaleMask)
+            // The remaining original iOS template fields vary by kind.
             //   AppIcon  : [u32=2, u16=1, u16=1, u32=7]
             //   Image    : [u32=1, u16=1, u16=0, u32=1]
             //   Vector   : [u32=1, u16=1, u16=0, u32=1]   (same shape as Image)
-            // The exact semantics aren't fully reverse-engineered yet, so for
-            // v1 we hardcode the templates per kind and pass through the
-            // discovered (idiom, subtype) count. Field 7 in particular seems
-            // to track that count.
-            w.writeLE(idiomSubtypeCount)
-            switch kind {
-            case .appIcon:
+            // tvOS uses the observed common (1, 0, 1) suffix and actual
+            // idiom mask; iOS retains its existing template byte-for-byte.
+            w.writeLE(platform == .tvOS ? idiomMask : idiomSubtypeCount)
+            switch (platform, kind) {
+            case (.tvOS, _):
+                w.writeLE(UInt16(1))
+                w.writeLE(UInt16(0))
+                w.writeLE(UInt32(1))
+            case (.iOS, .appIcon):
                 w.writeLE(UInt16(1))            // (u16, u16) tuple
                 w.writeLE(UInt16(1))
                 w.writeLE(UInt32(7))
-            case .image, .vector:
+            case (.iOS, .image), (.iOS, .vector):
                 w.writeLE(UInt16(1))
                 w.writeLE(UInt16(0))
                 w.writeLE(UInt32(1))
@@ -82,11 +82,13 @@ enum BitmapKeys {
     }
 
     /// Per-asset BITMAPKEYS entry: `(NameIdentifier, descriptor bytes)`.
-    static func entries(for assets: [(name: String, descriptor: Descriptor)]) -> [BOMTree.InlineKeyEntry] {
+    static func entries(
+        for assets: [(name: String, descriptor: Descriptor)], platform: XCAssetCompiler.Platform = .iOS
+    ) -> [BOMTree.InlineKeyEntry] {
         return assets.map { asset in
             BOMTree.InlineKeyEntry(
                 key: FacetKeys.nameHash(asset.name) & 0xFFFF,
-                value: asset.descriptor.encode()
+                value: asset.descriptor.encode(platform: platform)
             )
         }
     }
@@ -100,7 +102,7 @@ enum BitmapKeys {
     static func descriptor(forAsset name: String, renditions: [Rendition]) -> Descriptor? {
         let hasBitmapOrPreservedSource = renditions.contains { rendition in
             switch rendition.body {
-            case .bitmap, .preservedSource: return true
+            case .bitmap, .preservedSource, .layerStack: return true
             case .color: return false
             }
         }
@@ -118,7 +120,15 @@ enum BitmapKeys {
             return (idiom << 16) | subtype
         })
 
-        return Descriptor(kind: kind, idiomSubtypeCount: UInt32(idiomSubtypes.count))
+        let keys = renditions.map(RenditionKey.init)
+        let scaleMask = keys.reduce(UInt32(0)) { $0 | (UInt32(1) << UInt32($1.scale)) }
+        let idiomMask = keys.reduce(UInt32(0)) { $0 | (UInt32(1) << UInt32($1.idiom)) }
+        return Descriptor(
+            kind: kind,
+            idiomSubtypeCount: UInt32(idiomSubtypes.count),
+            scaleMask: scaleMask,
+            idiomMask: idiomMask
+        )
     }
 
     /// AppIcon takes precedence over Vector takes precedence over Image:

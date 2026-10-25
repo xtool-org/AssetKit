@@ -30,6 +30,22 @@ if let bundle = result.appIconBundle {
 }
 ```
 
+For a tvOS catalog, select the platform explicitly:
+
+```swift
+let compiler = XCAssetCompiler(deploymentTarget: "17.0", platform: .tvOS)
+let result = try await compiler.compile(catalog: catalogURL)
+```
+
+The default platform remains iOS. In a mixed catalog, iOS selects its
+`.appiconset` and ignores TV-only Brand Assets; tvOS selects its `.brandassets`
+and ignores the iOS app icon. Merge the returned `appIconBundle` metadata into
+the app's Info.plist. tvOS names the small stack in `CFBundleIcons` and maps
+the supplied Top Shelf roles into `TVTopShelfImage`.
+tvOS compilation rejects distinct facet names that collide in the current
+16-bit CoreUI identifier mapping, so a layer cannot alias another asset.
+Branding elements must also have unique names across their roles and types.
+
 ## What it supports
 
 - `.imageset`
@@ -38,13 +54,26 @@ if let bundle = result.appIconBundle {
   - JPG sources stored as preserved raw renditions (JPEG bytes passed through; original compression preserved)
 - `.colorset` (sRGB and display-P3, hex or float components, dark/light appearances)
 - `.appiconset` (per-idiom and per-size, with the loose-PNG fallback that SpringBoard expects alongside `Assets.car`). PNG sources only; SVG/JPG are rejected because SpringBoard's icon-render pipeline requires PNG.
+- tvOS `.brandassets` with a 400×240 primary icon and an optional 1280×768
+  marketing icon, each containing two embedded PNG layers with default canvas
+  and frame geometry. Layer relationships and qualified names are retained in
+  CoreUI LayerStack renditions; flattened previews are emitted separately.
+  Top Shelf image roles and app icon metadata are returned in `appIconBundle`.
+  Sources must use sRGB, the `tv` idiom, and distinct 1x/2x scales (marketing
+  icons use 1x only), with an opaque background layer.
 
 ## What it deliberately doesn't support
 
 - `.pdf` vector sources (the CoreUI 970 DWAR envelope path is SVG-flavoured; adding PDF would need a separate `pixelFormat`)
 - Multi-rendition fanout — actool emits multiple compression variants per asset (`deepmap-lzfse`, `deepmap2`, `palette-img`); this writer emits one rendition per `(idiom, scale, appearance)` tuple per source format. Sufficient for iOS 16+.
 - Data sets, sticker sets, AR reference objects
-- macOS / tvOS / watchOS asset variants beyond what the structural attribute IDs encode
+- Standalone `.imagestack` assets, custom tvOS layer geometry, referenced layers, additional layers, and dark or
+  display-P3 Brand Assets. Unsupported forms are rejected, rather than flattened
+  or emitted with incomplete layer relationships.
+- Apple's undocumented blurred radiosity renditions for tvOS focus effects.
+  The current output's icon-loading and focus behavior still needs native tvOS
+  runtime validation; structural CAR compatibility does not prove that behavior.
+- macOS / watchOS asset variants beyond what the structural attribute IDs encode
 
 These can be added; the format mechanisms in `Sources/AssetKit/CAR/` are general enough.
 
@@ -60,7 +89,11 @@ output is byte-deterministic across Linux and macOS.
 swift test
 ```
 
-The test suite includes a macOS-only gate (`AssetutilParseTests`) that compiles a fixture catalog and verifies Apple's own `xcrun assetutil --info` parses the bytes and reports the expected rendition fields. This is the durable verification for CoreUI format compatibility and gates merges via CI.
+The test suite includes macOS-only gates that compile iOS and tvOS fixture
+catalogs and verify Apple's own `xcrun assetutil --info` parses the bytes and
+reports the expected rendition fields. These checks run in CI. Linux tests
+cover layer ordering and references, mixed-catalog platform selection, the
+observed LayerStack record layout, compositing, and unsupported geometry.
 
 ## License
 

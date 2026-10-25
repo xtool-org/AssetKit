@@ -5,9 +5,9 @@ public struct CompileResult: Sendable {
     /// contained no assets (callers receive a structurally valid empty CAR).
     public var carData: Data
 
-    /// Glue needed to ship an `.appiconset` as part of an iOS app bundle.
-    /// `nil` if the catalog contained no `.appiconset`. Present iff the
-    /// catalog contained exactly one `.appiconset`.
+    /// Bundle metadata for the selected platform's app icon. iOS uses an
+    /// `.appiconset`; tvOS uses the primary stack in a `.brandassets` bundle.
+    /// `nil` when the catalog has no icon for the selected platform.
     public var appIconBundle: AppIconBundle?
 
     public init(carData: Data, appIconBundle: AppIconBundle? = nil) {
@@ -16,18 +16,15 @@ public struct CompileResult: Sendable {
     }
 }
 
-/// iOS-app-bundle glue derived from the catalog's `.appiconset`. The .car
-/// alone is not enough to ship an iOS app icon: SpringBoard's icon-render
-/// pipeline falls back to a set of loose PNGs in the bundle root, and the
-/// `Info.plist` must declare them.
+/// Platform-specific app icon and Top Shelf bundle metadata. iOS additionally
+/// needs loose PNGs for SpringBoard's icon-render fallback path.
 public struct AppIconBundle: Sendable {
-    /// The basename of the `.appiconset` (e.g. "AppIcon"), used as the
-    /// `CFBundleIconName` value.
+    /// The selected icon asset name, such as an iOS `.appiconset` basename
+    /// or the small tvOS image stack's name.
     public var primaryIconName: String
 
-    /// Plist keys to merge into the app's `Info.plist`. Includes
-    /// `CFBundleIconName`, `CFBundleIcons`, `CFBundleIcons~ipad`, and the
-    /// flat `CFBundleIconFiles` fallback list.
+    /// Plist keys to merge into the app's `Info.plist`. iOS emits its icon
+    /// fallback keys; tvOS emits `CFBundleIcons` and `TVTopShelfImage` roles.
     public var infoPlistAdditions: [String: any Sendable]
 
     /// Loose PNG files that must be copied into the app bundle root
@@ -35,7 +32,7 @@ public struct AppIconBundle: Sendable {
     /// `AppIcon60x60@2x.png`). SpringBoard's icon-rendering pipeline reads
     /// these directly when CoreUI's rendition lookup misses (which happens
     /// when our CRC32-derived NameIdentifier differs from actool's hash) --
-    /// without these files, home-screen icons fail to render.
+    /// without these files, home-screen icons fail to render. Empty for tvOS.
     public var looseFiles: [LooseFile]
 
     public init(
@@ -61,7 +58,13 @@ public struct LooseFile: Sendable {
 }
 
 public struct XCAssetCompiler: Sendable {
+    public enum Platform: String, Sendable {
+        case iOS = "ios"
+        case tvOS = "atv"
+    }
+
     public var deploymentTarget: String
+    public var platform: Platform
     /// Strategy used to rasterise `.svg` sources to PNG bytes. Defaults to
     /// `RsvgConvertRasterizer`, which shells out to `rsvg-convert`. Replace
     /// when you need a different rasteriser (no PATH dep, different
@@ -70,15 +73,21 @@ public struct XCAssetCompiler: Sendable {
 
     public init(
         deploymentTarget: String,
+        platform: Platform = .iOS,
         svgRasterizer: any SVGRasterizer = RsvgConvertRasterizer()
     ) {
         self.deploymentTarget = deploymentTarget
+        self.platform = platform
         self.svgRasterizer = svgRasterizer
     }
 
     public func compile(catalog catalogURL: URL) async throws -> CompileResult {
         let loader = CatalogLoader()
-        let loaded = try await loader.load(catalog: catalogURL)
+        let loaded = try await loader.load(catalog: catalogURL, platform: platform)
+
+        if let stack = loaded.imageStacks.first {
+            throw XCAssetCompilerError.unsupportedAssetType("\(stack.name).imagestack")
+        }
 
         var renditions: [Rendition] = []
 
@@ -93,7 +102,7 @@ public struct XCAssetCompiler: Sendable {
         }
 
         var appIconBundle: AppIconBundle?
-        if let appIcon = loaded.appIcon {
+        if platform == .iOS, let appIcon = loaded.appIcon {
             let plist = try AppIconPlistEmitter.emit(appIcon)
             renditions.append(contentsOf: try ImageRenderer.appIconRenditions(for: appIcon, files: plist.iconFiles))
 
@@ -112,9 +121,32 @@ public struct XCAssetCompiler: Sendable {
             )
         }
 
-        let writer = CARWriter(deploymentTarget: deploymentTarget, renditions: renditions)
+        if platform == .tvOS {
+            guard loaded.brandAssets.count <= 1 else {
+                throw XCAssetCompilerError.multipleBrandAssetSets(loaded.brandAssets.map(\.name))
+            }
+            if let brand = loaded.brandAssets.first {
+                let output = try BrandAssetsRenderer.render(brand, svgRasterizer: svgRasterizer)
+                renditions.append(contentsOf: output.renditions)
+                appIconBundle = output.appIconBundle
+            }
+            try validateFacetIdentifiers(renditions)
+        }
+
+        let writer = CARWriter(deploymentTarget: deploymentTarget, renditions: renditions, platform: platform)
         let bytes = try writer.write()
 
         return CompileResult(carData: bytes, appIconBundle: appIconBundle)
+    }
+
+    private func validateFacetIdentifiers(_ renditions: [Rendition]) throws {
+        var namesByIdentifier: [UInt16: String] = [:]
+        for name in Set(renditions.map(\.name)).sorted() {
+            let identifier = UInt16(FacetKeys.nameHash(name) & 0xFFFF)
+            if let other = namesByIdentifier[identifier] {
+                throw XCAssetCompilerError.assetIdentifierCollision(first: other, second: name, identifier: identifier)
+            }
+            namesByIdentifier[identifier] = name
+        }
     }
 }

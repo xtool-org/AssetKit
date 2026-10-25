@@ -27,6 +27,8 @@ enum CSIHeader {
     /// renderer on the DWAR-wrapped body.
     static let pixelFormatSVG: UInt32 = 0x53564720
 
+    static let pixelFormatData: UInt32 = 0x44415441
+
     /// Layout types observed in the reference. The names are derived from
     /// CoreUI symbol names where known.
     enum Layout: UInt16 {
@@ -40,6 +42,8 @@ enum CSIHeader {
         /// category; SVG promotes to its own layout because vector
         /// renditions surface a different AssetType to `assetutil`.
         case vector = 9
+        case layerStack = 1002
+        case layerStackPreview = 0
     }
 
     // swiftlint:disable:next function_parameter_count

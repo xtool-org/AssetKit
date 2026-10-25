@@ -13,6 +13,10 @@ public enum XCAssetCompilerError: Error, Sendable, Equatable {
     case unsupportedAssetType(String)
     case malformedJPEG(reason: String)
     case unsupportedAppIconSource(asset: String, filename: String)
+    case invalidBrandAsset(asset: String, reason: String)
+    case invalidImageStack(asset: String, reason: String)
+    case multipleBrandAssetSets([String])
+    case assetIdentifierCollision(first: String, second: String, identifier: UInt16)
     case svgDimensionsMissing(asset: String, filename: String)
     case svgRasterizationFailed(asset: String, filename: String, underlying: String)
 }
@@ -44,6 +48,14 @@ extension XCAssetCompilerError: CustomStringConvertible {
             return "Malformed JPEG: \(reason)"
         case .unsupportedAppIconSource(let asset, let filename):
             return "AppIcon '\(asset)' source file '\(filename)' is not a PNG; only .png is supported for app icons"
+        case .invalidBrandAsset(let asset, let reason):
+            return "Invalid Brand Assets '\(asset)': \(reason)"
+        case .invalidImageStack(let asset, let reason):
+            return "Invalid Image Stack '\(asset)': \(reason)"
+        case .multipleBrandAssetSets(let names):
+            return "Catalog has more than one .brandassets: \(names.joined(separator: ", "))"
+        case .assetIdentifierCollision(let first, let second, let identifier):
+            return "Asset names '\(first)' and '\(second)' map to the same CoreUI identifier \(identifier)"
         case .svgDimensionsMissing(let asset, let filename):
             return "SVG asset '\(asset)' file '\(filename)' has no usable width/height or viewBox; cannot determine intrinsic size"
         case .svgRasterizationFailed(let asset, let filename, let underlying):

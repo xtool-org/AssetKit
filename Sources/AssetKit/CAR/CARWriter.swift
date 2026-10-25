@@ -11,6 +11,7 @@ import Foundation
 struct CARWriter: Sendable {
     var deploymentTarget: String
     var renditions: [Rendition]
+    var platform: XCAssetCompiler.Platform = .iOS
 
     func write() throws -> Data {
         let layout = CARLayout(renditions: renditions)
@@ -48,10 +49,13 @@ struct CARWriter: Sendable {
         )
         bom.setVariable("APPEARANCEKEYS", blockID: appearanceTreeID)
 
-        let kfmtBlockID = bom.addBlock(KeyFormatBlock.data())
+        let keyFormat = platform == .tvOS ? tvKeyFormat : v1KeyFormat
+        let kfmtBlockID = bom.addBlock(KeyFormatBlock.data(attributes: keyFormat))
         bom.setVariable("KEYFORMAT", blockID: kfmtBlockID)
 
-        let extendedMetadataBlockID = bom.addBlock(ExtendedMetadata.data(deploymentTarget: deploymentTarget))
+        let extendedMetadataBlockID = bom.addBlock(ExtendedMetadata.data(
+            deploymentTarget: deploymentTarget, platform: platform.rawValue
+        ))
         bom.setVariable("EXTENDED_METADATA", blockID: extendedMetadataBlockID)
 
         let bitmapAssets: [(name: String, descriptor: BitmapKeys.Descriptor)] =
@@ -65,7 +69,7 @@ struct CARWriter: Sendable {
         if !bitmapAssets.isEmpty {
             let bitmapKeysTreeID = BOMTree.insertInlineKey(
                 into: &bom,
-                entries: BitmapKeys.entries(for: bitmapAssets),
+                entries: BitmapKeys.entries(for: bitmapAssets, platform: platform),
                 blockSize: 1024
             )
             bom.setVariable("BITMAPKEYS", blockID: bitmapKeysTreeID)
@@ -81,6 +85,8 @@ struct CARWriter: Sendable {
             return CSIWriter.bitmap(name: rendition.name, body: body, scaleFactor: scaleFactor)
         case .color(let body):
             return CSIWriter.color(name: rendition.name, body: body)
+        case .layerStack(let body):
+            return CSIWriter.layerStack(body: body)
         case .preservedSource(let body):
             // SVG renditions are scale-free; the reference leaves
             // scaleFactor=0 for them. JPGs respect the @Nx suffix the same

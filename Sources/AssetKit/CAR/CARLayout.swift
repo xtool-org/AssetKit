@@ -50,7 +50,7 @@ struct CARLayout {
         case .bitmap(let body):
             switch body.kind {
             case .appIcon: return .appIcon
-            case .image: return .image
+            case .image, .layerStackPreview: return .image
             }
         case .color: return .color
         // Preserved-source renditions live in the `.image` category at every
@@ -58,6 +58,7 @@ struct CARLayout {
         // key all reuse the same element/part as a generic PNG imageset.
         // The source format only shows up in the CSI header's pixelFormat.
         case .preservedSource: return .image
+        case .layerStack: return .image
         }
     }
 }

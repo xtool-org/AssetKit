@@ -9,7 +9,10 @@ import Foundation
 /// COLR block for color).
 enum CSIWriter {
     static func bitmap(name: String, body: BitmapBody, scaleFactor: UInt32) -> Data {
-        let tvl = CSITVL.encode([
+        let preview = body.kind == .layerStackPreview
+        let tvl = CSITVL.encode(preview ? [
+            .bitmapDescriptor(width: 0, height: 0), .sliceScale, .bitmapFlag, .bytesPerRow(width: body.width),
+        ] : [
             .bitmapDescriptor(width: body.width, height: body.height),
             .destRect(width: body.width, height: body.height),
             .sliceScale,
@@ -42,7 +45,7 @@ enum CSIWriter {
             scaleFactor: scaleFactor,
             pixelFormat: CSIHeader.pixelFormatARGB,
             colorSpace: UInt32(body.colorSpaceID),
-            layout: .bitmapIcon,
+            layout: preview ? .layerStackPreview : .bitmapIcon,
             name: body.renditionName,
             tvlLength: UInt32(tvl.count),
             bitmapCount: 1,
