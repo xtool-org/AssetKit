@@ -64,7 +64,11 @@ struct AssetutilParseTests {
         try assertHeader(entries.first)
 
         let renditions = entries.dropFirst().filter { $0["AssetType"] as? String == "Icon Image" }
-        #expect(renditions.count == 2, "expected two raw Icon Image renditions (@2x and @3x)")
+        #expect(renditions.count == 3, "expected two source renditions and the derived 1792 rendition")
+        let derived = renditions.first {
+            ($0["Scale"] as? Int) == 2 && ($0["PixelWidth"] as? Int) == 180
+        }
+        #expect(derived?["PixelHeight"] as? Int == 180)
 
         for (i, rendition) in renditions.enumerated() {
             #expect(rendition["Idiom"] as? String == "phone", "rendition[\(i)] idiom")
@@ -75,8 +79,8 @@ struct AssetutilParseTests {
             #expect((rendition["Colorspace"] as? String)?.lowercased() == "srgb", "rendition[\(i)] Colorspace")
         }
 
-        let twoX = renditions.first { ($0["Scale"] as? Int) == 2 }
-        let threeX = renditions.first { ($0["Scale"] as? Int) == 3 }
+        let twoX = renditions.first { $0["RenditionName"] as? String == "icon@2x.png" }
+        let threeX = renditions.first { $0["RenditionName"] as? String == "icon@3x.png" && ($0["Scale"] as? Int) == 3 }
         #expect(twoX?["PixelWidth"] as? Int == 120)
         #expect(twoX?["PixelHeight"] as? Int == 120)
         #expect(twoX?["RenditionName"] as? String == "icon@2x.png")

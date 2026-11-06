@@ -155,6 +155,8 @@ struct AppIconIconIndexTests {
         )
         let renditions = try renditions(for: appIcon)
         #expect(renditions.count == 10) // 6 icon + 4 MultiSized
+        let descriptor = try #require(BitmapKeys.descriptor(forAsset: "AppIcon", renditions: renditions))
+        #expect(descriptor.idiomSubtypeCount == 4)
 
         let expectedKeys = [
             // (scale, idiom, subtype, dimension2, part) per oracle RENDITIONS.

@@ -128,13 +128,10 @@ enum BitmapKeys {
 
         let kind = inferKind(from: renditions)
 
-        // (idiom << 16) | subtype packs each (idiom, subtype) pair into a
-        // single UInt32 for Set uniqueness. Subtype is always 0 today; the
-        // packing exists to match how CoreUI would distinguish (e.g.) iPhone
-        // 60pt vs iPhone 76pt if subtype were ever non-zero.
+        // (idiom << 16) | subtype packs each tuple into a single UInt32 for Set uniqueness.
         let idiomSubtypes = Set(renditions.map { rendition -> UInt32 in
             let idiom = UInt32(rendition.idiom.rawValueByte)
-            let subtype: UInt32 = 0
+            let subtype = UInt32(rendition.subtype ?? 0)
             return (idiom << 16) | subtype
         })
 

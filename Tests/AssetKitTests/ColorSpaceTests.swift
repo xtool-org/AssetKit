@@ -247,7 +247,7 @@ struct ColorSpaceTests {
               "color" : {
                 "platform" : "ios",
                 "color-space" : "srgb",
-                "components" : { "red" : "255", "green" : "0x80", "blue" : "0", "alpha" : "0xFF" }
+                "components" : { "red" : "1", "green" : "0x80", "blue" : "0", "alpha" : "1" }
               }
             }
           ],

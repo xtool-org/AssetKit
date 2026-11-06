@@ -194,7 +194,7 @@ struct ColorSetContents: Codable, Sendable {
                 guard let n = Double(s) else {
                     throw XCAssetCompilerError.invalidColorComponent(s)
                 }
-                return s.contains(".") || s.contains("e") || s.contains("E") ? n : n / 255
+                return s.contains(".") || s.contains("e") || s.contains("E") || n == 1 ? n : n / 255
             }
         }
     }
