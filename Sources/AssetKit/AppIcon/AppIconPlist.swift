@@ -28,7 +28,7 @@ enum AppIconPlistEmitter {
             guard FileManager.default.fileExists(atPath: src.path) else {
                 throw XCAssetCompilerError.missingReferencedFile(asset: appIcon.name, filename: filename)
             }
-            guard let (w, _) = image.pointSize, let scale = image.scale?.factor else {
+            guard let (w, _) = image.pointSize, w > 0, let scale = image.scale?.factor else {
                 throw XCAssetCompilerError.appIconSizeMissing(asset: appIcon.name, size: image.size)
             }
             let bundleName = "\(appIcon.name)\(formatSize(w))x\(formatSize(w))"

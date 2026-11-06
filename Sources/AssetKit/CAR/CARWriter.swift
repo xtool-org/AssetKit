@@ -21,12 +21,25 @@ struct CARWriter: Sendable {
         // KEYFORMAT, EXTENDED_METADATA, BITMAPKEYS. Reordering or omitting
         // a `setVariable` here breaks iOS lookups silently.
 
+        // KEYFORMAT is catalog-wide and actool only lists the attributes in
+        // use: the base eight, plus dimension2 when some rendition carries
+        // an Icon Index (app icons). Rendition keys pack exactly these
+        // tokens in this order (actool 27.0: icon cars 18-byte keys, color
+        // cars 16-byte keys).
+        let usesIconIndex = renditions.contains { rendition in
+            if case .bitmap(let body) = rendition.body, body.kind == .appIcon {
+                return true
+            }
+            return false
+        }
+        let keyFormat: [AttributeID] = usesIconIndex ? v1KeyFormat : baseKeyFormat
+
         let headerBlockID = bom.addBlock(CARHeaderBlock.data(renditionCount: UInt32(renditions.count)))
         bom.setVariable("CARHEADER", blockID: headerBlockID)
 
         let renditionEntries: [BOMTree.Entry] = renditions.map { rendition in
             BOMTree.Entry(
-                key: RenditionKey(rendition: rendition).encode(),
+                key: RenditionKey(rendition: rendition).encode(format: keyFormat),
                 value: csiData(for: rendition)
             )
         }
@@ -48,7 +61,7 @@ struct CARWriter: Sendable {
         )
         bom.setVariable("APPEARANCEKEYS", blockID: appearanceTreeID)
 
-        let kfmtBlockID = bom.addBlock(KeyFormatBlock.data())
+        let kfmtBlockID = bom.addBlock(KeyFormatBlock.data(attributes: keyFormat))
         bom.setVariable("KEYFORMAT", blockID: kfmtBlockID)
 
         let extendedMetadataBlockID = bom.addBlock(ExtendedMetadata.data(deploymentTarget: deploymentTarget))
@@ -79,6 +92,8 @@ struct CARWriter: Sendable {
         case .bitmap(let body):
             let scaleFactor = UInt32(rendition.scale?.factor ?? 1) * 100
             return CSIWriter.bitmap(name: rendition.name, body: body, scaleFactor: scaleFactor)
+        case .multiSized(let body):
+            return CSIWriter.multiSized(name: rendition.name, body: body)
         case .color(let body):
             return CSIWriter.color(name: rendition.name, body: body)
         case .preservedSource(let body):

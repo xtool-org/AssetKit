@@ -50,14 +50,37 @@ struct CSIWriterTests {
         #expect(data.count >= 184)
     }
 
-    @Test("Color CSI body starts with COLR magic and four IEEE-754 doubles")
+    @Test("Color CSI matches actool 27.0's bytes for an sRGB color")
     func colorBody() {
-        let body = ColorBody(red: 1, green: 0, blue: 0.5, alpha: 1, colorSpaceID: 0)
-        let data = CSIWriter.color(name: "Accent", body: body)
-        // CSI header is 184 bytes; body starts at offset 184
-        #expect(data.count >= 184 + 4 + 4 + 4 + 4 + 8 * 4)
-        let payloadStart = 184
-        let magic = data.subdata(in: payloadStart..<(payloadStart + 4))
-        #expect(Array(magic) == Array("COLR".utf8))
+        // Captured from Xcode 27.0 actool (assetutil reads it as sRGB [1, 0, 0, 1]).
+        let referenceTVL: [UInt8] = [
+            0xEC, 0x03, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0xEE, 0x03, 0, 0, 4, 0, 0, 0, 1, 0, 0, 0,
+        ]
+        let referenceBody: [UInt8] = [
+            0x52, 0x4C, 0x4F, 0x43, 1, 0, 0, 0, 1, 0, 0, 0, 4, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0xF0, 0x3F, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xF0, 0x3F,
+        ]
+        let body = ColorBody(components: [1, 0, 0, 1], colorSpaceID: 1)
+        let data = [UInt8](CSIWriter.color(name: "Dot", body: body))
+        #expect(Array(data[184..<(184 + 28)]) == referenceTVL)
+        #expect(Array(data[(184 + 28)...]) == referenceBody)
+        // Header: scaleFactor (offset 20) and colorSpace (offset 28) zero, bitmap count 1.
+        #expect(data[20..<24].allSatisfy { $0 == 0 } && data[28..<32].allSatisfy { $0 == 0 })
+        #expect(Array(data[172..<176]) == [1, 0, 0, 0])
+    }
+
+    @Test("System color reference matches actool 27.0's bytes (labelColor, light)")
+    func systemColorBody() {
+        // Captured from Xcode 27.0 actool; assetutil reads it as "System Color Name": "labelColor".
+        let referenceBody: [UInt8] = [
+            0x52, 0x4C, 0x4F, 0x43, 1, 0, 0, 0, 0x02, 0x01, 0, 0, 2, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xF0, 0x3F,
+            0x52, 0x4C, 0x4F, 0x43, 1, 0, 0, 0, 10, 0, 0, 0,
+        ] + Array("labelColor".utf8)
+        let body = ColorBody(components: [0, 1], colorSpaceID: 1, systemName: "labelColor")
+        let data = [UInt8](CSIWriter.color(name: "label", body: body))
+        #expect(Array(data[(184 + 28)...]) == referenceBody)
     }
 }

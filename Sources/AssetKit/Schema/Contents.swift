@@ -137,35 +137,64 @@ struct ColorSetContents: Codable, Sendable {
     }
 
     struct Color: Codable, Sendable {
-        var colorSpace: String
-        var components: Components
+        /// Absent when the entry references a system color instead.
+        var colorSpace: String?
+        var components: Components?
+        /// A system color name such as "labelColor" (Xcode: Content > System color).
+        var reference: String?
 
         enum CodingKeys: String, CodingKey {
             case colorSpace = "color-space"
-            case components
+            case components, reference
         }
 
         struct Components: Codable, Sendable {
-            var red: String
-            var green: String
-            var blue: String
-            var alpha: String
+            var red: String?
+            var green: String?
+            var blue: String?
+            /// Gray color spaces (`gray-gamma-22`, `extended-gray`) carry a
+            /// single white level plus alpha instead of RGB.
+            var white: String?
+            var alpha: String?
 
-            func asDoubles() throws -> (r: Double, g: Double, b: Double, a: Double) {
-                func parse(_ s: String) throws -> Double {
-                    if s.hasPrefix("0x") || s.hasPrefix("0X") {
-                        let hex = String(s.dropFirst(2))
-                        guard let n = UInt8(hex, radix: 16) else {
-                            throw XCAssetCompilerError.invalidColorComponent(s)
-                        }
-                        return Double(n) / 255
-                    }
-                    guard let n = Double(s) else {
-                        throw XCAssetCompilerError.invalidColorComponent(s)
-                    }
-                    return n > 1 ? n / 255 : n
+            /// True when the entry is written in a gray color space (Xcode
+            /// keys it on `white`, not `red`).
+            var isGray: Bool { white != nil }
+
+            /// `(white, alpha)` for gray spaces. Throws for RGB entries.
+            func asGrayDoubles() throws -> (white: Double, alpha: Double) {
+                guard let white, let alpha else {
+                    throw XCAssetCompilerError.invalidColorComponent(
+                        "gray components need white and alpha")
+                }
+                return (try parse(white), try parse(alpha))
+            }
+
+            /// `(r, g, b, a)` for RGB spaces. Throws for gray entries.
+            func asRGBDoubles() throws -> (r: Double, g: Double, b: Double, a: Double) {
+                guard let red, let green, let blue, let alpha else {
+                    throw XCAssetCompilerError.invalidColorComponent(
+                        "RGB components need red, green, blue and alpha")
                 }
                 return (try parse(red), try parse(green), try parse(blue), try parse(alpha))
+            }
+
+            /// Accepts Xcode's component forms: float ("0.500", "-0.100",
+            /// extended values beyond [0,1] included), 8-bit hex ("0xFF")
+            /// and 0-255 decimal ("255"). A decimal point means a direct
+            /// float; a plain integer means the 0-255 form.
+            func parse(_ s: String) throws -> Double {
+                if s.hasPrefix("0x") || s.hasPrefix("0X") {
+                    let hex = String(s.dropFirst(2))
+                    guard let n = UInt8(hex, radix: 16) else {
+                        throw XCAssetCompilerError.invalidColorComponent(s)
+                    }
+                    return Double(n) / 255
+                }
+                guard let n = Double(s) else {
+                    throw XCAssetCompilerError.invalidColorComponent(s)
+                }
+                return s.contains(".") || s.contains("e") || s.contains("E") || n == 1 ? n : n / 255
             }
         }
     }

@@ -5,6 +5,7 @@ struct Rendition: Sendable {
         case bitmap(BitmapBody)
         case color(ColorBody)
         case preservedSource(PreservedSourceBody)
+        case multiSized(MultiSizedBody)
     }
 
     var name: String
@@ -12,7 +13,31 @@ struct Rendition: Sendable {
     var scale: Scale?
     var appearance: Appearance?
     var gamut: Gamut?
+    /// Raw rendition-key subtype token. Non-zero only for icon variants
+    /// keyed on a device trait; actool keys the 90 pt large-phone home icon
+    /// (derived from the 60 pt @3x slot) at subtype 1792.
+    var subtype: UInt16? = nil
+    /// App-icon "Icon Index": the rank of this rendition's point size among
+    /// the appiconset's distinct point sizes, ascending. Only icon renditions
+    /// carry it; assetutil surfaces it as "Icon Index".
+    var iconIndex: UInt16? = nil
     var body: Body
+}
+
+/// Body of a MultiSized icon rendition (CSI layout 1010, 'MSIS' payload).
+/// actool emits one per (idiom, subtype) group of icon renditions; each
+/// entry maps a point size to the Icon Index of the bitmap rendition that
+/// satisfies it. Widths/heights are point sizes (83.5 pt truncates to 83,
+/// as in the reference output).
+struct MultiSizedBody: Sendable {
+    struct Size: Sendable {
+        var pointWidth: UInt32
+        var pointHeight: UInt32
+        var iconIndex: UInt32
+    }
+
+    /// One entry per distinct point size, ascending.
+    var sizes: [Size]
 }
 
 struct BitmapBody: Sendable {
@@ -47,11 +72,18 @@ struct BitmapBody: Sendable {
 }
 
 struct ColorBody: Sendable {
-    var red: Double
-    var green: Double
-    var blue: Double
-    var alpha: Double
+    /// Components in the color space's own order; RGB spaces carry 4
+    /// (r, g, b, a), gray spaces carry 2 (white, alpha). actool quantizes
+    /// each to Float32 before storing it in the COLR body's Float64 slots
+    /// (verified: Xcode 27.0 writes 1.1 as 0x3FF19999A0000000).
+    var components: [Double]
+    /// COLR colorspace ID. actool 27.0 maps: srgb 1, gray-gamma-22 2,
+    /// display-p3 3, extended-srgb 4, extended-linear-srgb 5, extended-gray 6;
+    /// the gray fallback for system colors carries 0x102.
     var colorSpaceID: UInt8
+    /// System color name ("labelColor"). The components then hold a gray
+    /// fallback for runtimes that cannot resolve it.
+    var systemName: String? = nil
 }
 
 /// Source file kept verbatim inside a DWAR envelope rather than rasterised

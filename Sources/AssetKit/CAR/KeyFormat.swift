@@ -17,10 +17,28 @@ enum AttributeID: UInt32 {
     case identifier = 17
 }
 
-/// Attribute order CoreUI 970 emits in `KEYFORMAT` (and which the rendition key
+/// Attribute order CoreUI emits in `KEYFORMAT` (and which the rendition key
 /// tuple positions mirror exactly). Order is significant: CoreUI binary-searches
 /// rendition keys by raw byte comparison after packing them into this slot
 /// layout.
+///
+/// KEYFORMAT is per-catalog: actool emits the base eight attributes and adds
+/// `dimension2` only when some rendition uses it (app icons carry an Icon
+/// Index there). Verified against actool 27.0: an icon-only catalog gets 9
+/// attributes, a color-only catalog gets 8, and rendition keys pack exactly
+/// that many tokens in this order.
+let baseKeyFormat: [AttributeID] = [
+    .appearance,
+    .localization,
+    .scale,
+    .idiom,
+    .subtype,
+    .identifier,
+    .element,
+    .part,
+]
+
+/// Key format for catalogs that use the Icon Index slot (app icons).
 let v1KeyFormat: [AttributeID] = [
     .appearance,
     .localization,

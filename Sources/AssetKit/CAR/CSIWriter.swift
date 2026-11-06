@@ -112,32 +112,86 @@ enum CSIWriter {
         return header + tvl + envelope
     }
 
+    /// MultiSized icon container (layout 1010). Header dimensions, scale,
+    /// pixelFormat and colorSpace are all zero like named colors; TVL is the
+    /// same all-zero 1004 + 1006:1 pair. The name is the ASSET name (not a
+    /// source filename), and the body lists point sizes; 83.5 pt truncates
+    /// to 83, as in the reference output.
+    static func multiSized(name: String, body: MultiSizedBody) -> Data {
+        let tvl = CSITVL.encode([.colorSlice, .bitmapFlag])
+        var w = ByteWriter()
+        w.writeLE(UInt32(0x4D53_4953))          // 'MSIS' (file bytes SISM)
+        w.writeLE(UInt32(1))                    // version
+        w.writeLE(UInt32(body.sizes.count))
+        for size in body.sizes {
+            w.writeLE(size.pointWidth)
+            w.writeLE(size.pointHeight)
+            w.writeLE(size.iconIndex)
+        }
+        let payload = w.data
+        let header = CSIHeader.encode(
+            renditionFlags: 0,
+            width: 0,
+            height: 0,
+            scaleFactor: 0,
+            pixelFormat: 0,
+            colorSpace: 0,
+            layout: .multiSized,
+            name: name,
+            tvlLength: UInt32(tvl.count),
+            bitmapCount: 1,
+            renditionLength: UInt32(payload.count)
+        )
+        return header + tvl + payload
+    }
+
+    /// Named color, in the layout actool 27.0 writes: header scale, colorSpace
+    /// and pixelFormat all zero; TVL (1004: zeros, 1006: 1); one body.
     static func color(name: String, body: ColorBody) -> Data {
+        let tvl = CSITVL.encode([.colorSlice, .bitmapFlag])
         let payload = colorBody(body: body)
         let header = CSIHeader.encode(
             renditionFlags: 0,
             width: 0,
             height: 0,
-            scaleFactor: 100,
+            scaleFactor: 0,
             pixelFormat: 0,
-            colorSpace: UInt32(body.colorSpaceID),
+            colorSpace: 0,
             layout: .namedColor,
             name: name,
-            tvlLength: 0,
-            bitmapCount: 0,
+            tvlLength: UInt32(tvl.count),
+            bitmapCount: 1,
             renditionLength: UInt32(payload.count)
         )
-        return header + payload
+        return header + tvl + payload
     }
 
+    /// 'COLR' as an LE multi-char constant (file bytes R,L,O,C), version 1,
+    /// colorSpaceID with flag bits, component count, then Float64 components.
+    /// A system color is a gray fallback (colorspace 0x102, [white, alpha])
+    /// followed by a second COLR record holding the name (length + UTF-8).
     private static func colorBody(body: ColorBody) -> Data {
         var w = ByteWriter()
-        w.writeFourCC("COLR")
-        w.writeLE(UInt32(0))                    // version
+        w.writeLE(UInt32(0x434F_4C52))
+        w.writeLE(UInt32(1))                    // version
+        if let name = body.systemName {
+            w.writeLE(UInt32(0x102))            // gray gamma 2.2, as actool writes it
+            w.writeLE(UInt32(2))
+            for component in body.components {
+                w.writeLE(component.bitPattern)
+            }
+            w.writeLE(UInt32(0x434F_4C52))
+            w.writeLE(UInt32(1))
+            w.writeLE(UInt32(name.utf8.count))
+            w.write(Array(name.utf8))
+            return w.data
+        }
         w.writeLE(UInt32(body.colorSpaceID))    // colorSpaceID with flag bits
-        w.writeLE(UInt32(4))                    // numberOfComponents
-        for component in [body.red, body.green, body.blue, body.alpha] {
-            w.writeLE(component.bitPattern)
+        w.writeLE(UInt32(body.components.count))
+        for component in body.components {
+            // actool quantizes each component to Float32 before storing it
+            // in the Float64 slot (Xcode 27.0 writes 1.1 as 0x3FF19999A0000000).
+            w.writeLE(Double(Float(component)).bitPattern)
         }
         return w.data
     }

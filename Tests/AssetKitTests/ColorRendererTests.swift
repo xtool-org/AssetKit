@@ -34,10 +34,7 @@ struct ColorRendererTests {
             Issue.record("expected color body")
             return
         }
-        #expect(abs(body.red - 0.5) < 1e-9)
-        #expect(abs(body.green - 0.25) < 1e-9)
-        #expect(abs(body.blue - 0.75) < 1e-9)
-        #expect(abs(body.alpha - 1) < 1e-9)
+        #expect(body.components == [0.5, 0.25, 0.75, 1])
         #expect(body.colorSpaceID == 1)
     }
 
@@ -69,7 +66,9 @@ struct ColorRendererTests {
             Issue.record("expected color body")
             return
         }
-        #expect(body.colorSpaceID == 2)
+        // actool 27.0 maps display-p3 to COLR colorspace 3 (srgb 1,
+        // gray-gamma-22 2, display-p3 3, extended-srgb 4, ...).
+        #expect(body.colorSpaceID == 3)
     }
 
     @Test("Parses 0x-prefixed hex components")
@@ -97,8 +96,8 @@ struct ColorRendererTests {
             Issue.record("expected color body")
             return
         }
-        #expect(abs(body.red - 1) < 1e-9)
-        #expect(abs(body.green - 0) < 1e-9)
-        #expect(abs(body.blue - 128 / 255) < 1e-9)
+        #expect(body.components[0] == 1)
+        #expect(body.components[1] == 0)
+        #expect(abs(body.components[2] - 128 / 255) < 1e-9)
     }
 }

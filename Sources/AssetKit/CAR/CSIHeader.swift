@@ -35,6 +35,10 @@ enum CSIHeader {
         /// pixelFormat selects the decoder, not the layout).
         case bitmapIcon = 12
         case namedColor = 1009
+        /// MultiSized icon container. The body is a 'MSIS' record (version,
+        /// count, then per-size width/height/index); actool emits one such
+        /// rendition per (idiom, subtype) group of app-icon renditions.
+        case multiSized = 1010
         /// Used by preserved-source SVG renditions in CoreUI 970. JPG keeps
         /// `bitmapIcon` because JPEG sits inside CoreUI's bitmap-asset
         /// category; SVG promotes to its own layout because vector

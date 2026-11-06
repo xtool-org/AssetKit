@@ -29,6 +29,13 @@ struct RenditionKey: Hashable, Sendable {
     enum Part: UInt16 {
         /// Used by SpringBoard's icon-render pipeline (`.appiconset`).
         case appIcon = 220
+        /// Named colors (`.colorset`). actool keys every color rendition,
+        /// system references included, at element 85 / part 217.
+        case color = 217
+        /// MultiSized icon container (CSI layout 1010, 'MSIS' body). actool
+        /// emits one per (idiom, subtype) group of icon renditions; CoreUI
+        /// resolves an icon request's point size through it.
+        case multiSized = 218
         /// Used by UIImage(named:) for generic `.imageset` assets.
         case image = 181
         /// Slot for preserved-source vector renditions (SVG). Reference
@@ -43,7 +50,7 @@ struct RenditionKey: Hashable, Sendable {
         self.localization = 0
         self.scale = rendition.scale?.rawValueByte ?? 0
         self.idiom = rendition.idiom.rawValueByte
-        self.subtype = 0
+        self.subtype = rendition.subtype ?? 0
         self.identifier = UInt16(FacetKeys.nameHash(rendition.name) & 0xFFFF)
         switch rendition.body {
         case .bitmap(let body):
@@ -51,19 +58,26 @@ struct RenditionKey: Hashable, Sendable {
             switch body.kind {
             case .appIcon:
                 self.part = Part.appIcon.rawValue
-                // Dimension2 is the appicon "Icon Index" slot. v1 only
-                // emits one logical icon size per appiconset, so this is
-                // always 1.
-                self.dimension2 = 1
+                // Dimension2 is the appicon "Icon Index" slot: the rank of
+                // this rendition's point size among the appiconset's
+                // distinct point sizes (assetutil surfaces it as
+                // "Icon Index").
+                self.dimension2 = rendition.iconIndex ?? 0
             case .image:
                 self.part = Part.image.rawValue
                 // Generic image assets don't use Dimension2 at all.
                 self.dimension2 = 0
             }
-        case .color:
-            self.element = 0
-            self.part = 0
+        case .multiSized:
+            self.element = Element.bitmap.rawValue
+            self.part = Part.multiSized.rawValue
             self.dimension2 = 0
+        case .color:
+            self.element = Element.bitmap.rawValue
+            self.part = Part.color.rawValue
+            self.dimension2 = 0
+            // actool keys named colors at scale 1 (assetutil: "Scale": 1).
+            self.scale = 1
         case .preservedSource(let body):
             self.element = Element.bitmap.rawValue
             self.dimension2 = 0
@@ -104,20 +118,31 @@ struct RenditionKey: Hashable, Sendable {
         self.part = part
     }
 
-    func encode() -> Data {
+    /// Packs the key as little-endian UInt16 tokens, one per attribute in
+    /// `format` (the catalog's KEYFORMAT). Token count = format count: a
+    /// color-only catalog's 8-attribute format yields 16-byte keys, an
+    /// icon catalog's 9-attribute format yields 18-byte keys, matching
+    /// actool 27.0.
+    func encode(format: [AttributeID]) -> Data {
         var w = ByteWriter()
-        w.writeLE(appearance)
-        w.writeLE(localization)
-        w.writeLE(scale)
-        w.writeLE(idiom)
-        w.writeLE(subtype)
-        w.writeLE(dimension2)
-        w.writeLE(identifier)
-        w.writeLE(element)
-        w.writeLE(part)
+        for attribute in format {
+            switch attribute {
+            case .appearance: w.writeLE(appearance)
+            case .localization: w.writeLE(localization)
+            case .scale: w.writeLE(scale)
+            case .idiom: w.writeLE(idiom)
+            case .subtype: w.writeLE(subtype)
+            case .dimension2: w.writeLE(dimension2)
+            case .identifier: w.writeLE(identifier)
+            case .element: w.writeLE(element)
+            case .part: w.writeLE(part)
+            }
+        }
         return w.data
     }
 
+    /// Decodes a key packed in `v1KeyFormat` order. Returns nil for other
+    /// formats (token count and positions differ).
     static func decode(_ data: Data) -> RenditionKey? {
         guard data.count == 18 else { return nil }
         func u16(_ offset: Int) -> UInt16 {

@@ -60,7 +60,8 @@ enum ImageRenderer {
     }
 
     static func appIconRenditions(for appIcon: LoadedAppIcon, files: [IconFile]) throws -> [Rendition] {
-        var out: [Rendition] = []
+        // Decode each source once, keeping its IconFile for index assignment.
+        var decoded: [(file: IconFile, rendition: Rendition)] = []
         for file in files {
             let filename = file.sourceURL.lastPathComponent
             guard SourceFormat.detect(filename: filename) == .png else {
@@ -89,8 +90,86 @@ enum ImageRenderer {
                 filename: filename,
                 kind: .appIcon
             )
-            out.append(contentsOf: try PNGSource.renditions(bytes: bytes, context: ctx))
+            for rendition in try PNGSource.renditions(bytes: bytes, context: ctx) {
+                decoded.append((file, rendition))
+            }
+        }
+
+        // "Icon Index" = the rank of the rendition's point size among the
+        // appiconset's distinct point sizes, ascending; shared across idioms
+        // and scales (60 pt @2x and @3x are both index 1; an ipad 20 pt and
+        // an iphone 20 pt are also both index 1). Both oracle runs agree.
+        //
+        // When the set provides an iphone 60 pt @3x source, actool also keys
+        // it as the 90 pt large-phone home icon (subtype 1792, scale 2); the
+        // 90 pt size then joins the ranking. Without a 60 pt @3x source no
+        // 1792 variant is emitted (second oracle run).
+        let largePhonePointSize = 90.0
+        let hasLargePhoneVariant = files.contains {
+            $0.idiom == .iphone && $0.pointSize == 60 && $0.scale == 3
+        }
+        var sizes = Set(files.map(\.pointSize))
+        if hasLargePhoneVariant { sizes.insert(largePhonePointSize) }
+        let iconIndexOfSize: [Double: UInt16] = Dictionary(
+            uniqueKeysWithValues: sizes.sorted().enumerated().map { ($0.element, UInt16($0.offset + 1)) }
+        )
+
+        var out: [Rendition] = []
+        // (idiom, subtype) -> point size -> icon index. One MultiSized
+        // rendition is emitted per group, mirroring the reference output.
+        var groups: [MultiSizedGroup: [UInt32: UInt32]] = [:]
+        for (file, rendition) in decoded {
+            var icon = rendition
+            icon.iconIndex = iconIndexOfSize[file.pointSize]
+            out.append(icon)
+            addMultiSizedEntry(
+                &groups, idiom: file.idiom, subtype: 0,
+                pointSize: UInt32(file.pointSize), index: UInt32(icon.iconIndex!)
+            )
+            if file.idiom == .iphone, file.pointSize == 60, file.scale == 3 {
+                // The 90 pt subtype-1792 home icon reuses the 60 pt @3x
+                // image verbatim (both are 180 px); only its key differs.
+                var large = rendition
+                large.scale = .x2
+                large.subtype = 1792
+                large.iconIndex = iconIndexOfSize[largePhonePointSize]
+                out.append(large)
+                addMultiSizedEntry(
+                    &groups, idiom: .iphone, subtype: 1792,
+                    pointSize: UInt32(largePhonePointSize), index: UInt32(large.iconIndex!)
+                )
+            }
+        }
+        for (group, entries) in groups {
+            out.append(Rendition(
+                name: appIcon.name,
+                idiom: group.idiom,
+                scale: .x1,
+                appearance: nil,
+                gamut: nil,
+                subtype: group.subtype == 0 ? nil : group.subtype,
+                body: .multiSized(MultiSizedBody(
+                    sizes: entries.sorted { $0.key < $1.key }.map {
+                        MultiSizedBody.Size(pointWidth: $0.key, pointHeight: $0.key, iconIndex: $0.value)
+                    }
+                ))
+            ))
         }
         return out
+    }
+
+    private struct MultiSizedGroup: Hashable {
+        var idiom: Idiom
+        var subtype: UInt16
+    }
+
+    private static func addMultiSizedEntry(
+        _ groups: inout [MultiSizedGroup: [UInt32: UInt32]],
+        idiom: Idiom,
+        subtype: UInt16,
+        pointSize: UInt32,
+        index: UInt32
+    ) {
+        groups[MultiSizedGroup(idiom: idiom, subtype: subtype), default: [:]][pointSize] = index
     }
 }

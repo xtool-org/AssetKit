@@ -30,7 +30,7 @@ struct RenditionKeyTests {
                                 element: 85,
                                 part: 220
                             )
-                            let data = key.encode()
+                            let data = key.encode(format: v1KeyFormat)
                             #expect(data.count == 18)
                             let decoded = RenditionKey.decode(data)
                             #expect(decoded == key)
@@ -54,7 +54,7 @@ struct RenditionKeyTests {
             element: 0x100f,
             part: 0x1211
         )
-        let bytes = [UInt8](key.encode())
+        let bytes = [UInt8](key.encode(format: v1KeyFormat))
         #expect(bytes == [
             0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
             0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
@@ -66,16 +66,16 @@ struct RenditionKeyTests {
     func sortOrder() {
         // First differing byte determines the order. Scale lives at bytes 4-5;
         // with appearance/localization both zero, scale orders ascending.
-        let scale2 = RenditionKey(scale: 2, idiom: 1).encode()
-        let scale3 = RenditionKey(scale: 3, idiom: 1).encode()
+        let scale2 = RenditionKey(scale: 2, idiom: 1).encode(format: v1KeyFormat)
+        let scale3 = RenditionKey(scale: 3, idiom: 1).encode(format: v1KeyFormat)
         #expect(BOMTree.byteCompare(scale2, scale3) < 0)
         // Idiom is at bytes 6-7, so it only breaks ties when earlier slots match.
-        let idiom1 = RenditionKey(scale: 2, idiom: 1).encode()
-        let idiom2 = RenditionKey(scale: 2, idiom: 2).encode()
+        let idiom1 = RenditionKey(scale: 2, idiom: 1).encode(format: v1KeyFormat)
+        let idiom2 = RenditionKey(scale: 2, idiom: 2).encode(format: v1KeyFormat)
         #expect(BOMTree.byteCompare(idiom1, idiom2) < 0)
         // Appearance is the highest-priority slot.
-        let appAny = RenditionKey(appearance: 0, scale: 3).encode()
-        let appDark = RenditionKey(appearance: 1, scale: 0).encode()
+        let appAny = RenditionKey(appearance: 0, scale: 3).encode(format: v1KeyFormat)
+        let appDark = RenditionKey(appearance: 1, scale: 0).encode(format: v1KeyFormat)
         #expect(BOMTree.byteCompare(appAny, appDark) < 0)
     }
 
