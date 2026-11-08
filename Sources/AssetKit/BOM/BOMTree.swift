@@ -64,8 +64,18 @@ struct BOMTree {
             leaf.writeBE(valueBlockIDs[i])
             leaf.writeBE(keyBlockIDs[i])
         }
-        if leaf.offset < Int(blockSize) {
-            leaf.writeZeros(Int(blockSize) - leaf.offset)
+        // actool follows the entries with 4 zero bytes and a copy of every
+        // key, in entry order, and sizes the leaf blockSize + the total key
+        // length. App Store Connect looks the app icon up through this copy:
+        // without it the catalog parses but it reports the icons as missing
+        // (ITMS-90022, 90023, 91111).
+        leaf.writeZeros(4)
+        for entry in sorted {
+            leaf.write(entry.key)
+        }
+        let leafSize = Int(blockSize) + sorted.reduce(0) { $0 + $1.key.count }
+        if leaf.offset < leafSize {
+            leaf.writeZeros(leafSize - leaf.offset)
         }
         let leafID = bom.addBlock(leaf.data)
 
