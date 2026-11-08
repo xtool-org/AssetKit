@@ -69,10 +69,12 @@ struct BOMTree {
         }
         let leafID = bom.addBlock(leaf.data)
 
-        // Tree header block. actool's tree headers are 29 bytes -- 21 bytes
-        // of fixed fields plus 8 trailing zeros (probably reserved/align).
-        // Match the layout so all trees in our output are the same size as
-        // the reference.
+        // Tree header block, 29 bytes like actool's. After the fixed fields
+        // actool writes the key length as a big-endian u32 (18 for
+        // RENDITIONS, 7 for a FACETKEYS tree holding "AppIcon", 15 for
+        // "UIAppearanceAny"), then 4 zero bytes. App Store Connect never
+        // finishes processing a build whose catalog leaves it at 0: the
+        // upload stays in PROCESSING with no error.
         var header = ByteWriter()
         header.writeBE(treeMagic)
         header.writeBE(UInt32(1))                   // version
@@ -80,7 +82,8 @@ struct BOMTree {
         header.writeBE(blockSize)
         header.writeBE(UInt32(sorted.count))        // pathCount
         header.write(byte: 0)                       // isPathInternal
-        header.writeZeros(8)                        // trailing reserved
+        header.writeBE(UInt32(sorted.map(\.key.count).max() ?? 0)) // key length
+        header.writeZeros(4)                        // reserved
         return bom.addBlock(header.data)
     }
 
