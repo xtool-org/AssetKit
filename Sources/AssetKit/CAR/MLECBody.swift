@@ -23,8 +23,27 @@ import Foundation
 /// single chunk covering the whole image. The 3-chunk split is mimicry
 /// rather than a correctness requirement: CoreUI accepts both layouts.
 enum MLECBody {
+    /// Rows are padded to a multiple of 32 bytes, like actool, and the
+    /// `bytesPerRow` TLV says so. App Store Connect never finishes processing
+    /// a build whose catalog stores tightly packed rows that are not already
+    /// a multiple of 32 bytes (a 180 px icon: 720 bytes instead of 736).
+    static func bytesPerRow(width: UInt32) -> Int {
+        (Int(width) * 4 + 31) & ~31
+    }
+
     static func encode(width: UInt32, height: UInt32, pixelsBGRA: [UInt8]) -> Data {
-        let bytesPerRow = Int(width) * 4
+        let packedRow = Int(width) * 4
+        let bytesPerRow = Self.bytesPerRow(width: width)
+        var padded = pixelsBGRA
+        if bytesPerRow != packedRow {
+            padded = [UInt8](repeating: 0, count: bytesPerRow * Int(height))
+            for row in 0..<Int(height) {
+                padded.replaceSubrange(
+                    row * bytesPerRow..<row * bytesPerRow + packedRow,
+                    with: pixelsBGRA[row * packedRow..<(row + 1) * packedRow]
+                )
+            }
+        }
         let canChunkInThree = height % 3 == 0
         let chunkCount: UInt32 = canChunkInThree ? 3 : 1
         let rowsPerChunk = height / chunkCount
@@ -33,7 +52,7 @@ enum MLECBody {
         for i in 0..<Int(chunkCount) {
             let start = i * Int(rowsPerChunk) * bytesPerRow
             let end = start + Int(rowsPerChunk) * bytesPerRow
-            let slice = Array(pixelsBGRA[start..<end])
+            let slice = Array(padded[start..<end])
             chunks.append((rows: rowsPerChunk, payload: LZFSE.encode(slice)))
         }
 

@@ -31,4 +31,16 @@ enum LZFSE {
         precondition(encoded > 0, "LZFSE encoding failed for \(input.count)-byte buffer")
         return Array(output.prefix(encoded))
     }
+
+    /// Decodes an LZFSE stream whose decoded size is at most `capacity`.
+    /// Only used to check the encoder's output.
+    static func decode(_ input: [UInt8], capacity: Int = 1 << 24) -> [UInt8] {
+        var output = [UInt8](repeating: 0, count: capacity)
+        let decoded = input.withUnsafeBufferPointer { inBuf -> Int in
+            output.withUnsafeMutableBufferPointer { outBuf in
+                lzfse_decode_buffer(outBuf.baseAddress!, capacity, inBuf.baseAddress!, input.count, nil)
+            }
+        }
+        return Array(output.prefix(decoded))
+    }
 }

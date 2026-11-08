@@ -67,9 +67,7 @@ enum TVLEntry {
         case .bytesPerRow(let width):
             w.writeLE(UInt32(1007))
             w.writeLE(UInt32(4))
-            let bytesPerRow = width * 4
-            let aligned = (bytesPerRow + 15) & ~15
-            w.writeLE(aligned)
+            w.writeLE(UInt32(MLECBody.bytesPerRow(width: width)))
         }
     }
 }
