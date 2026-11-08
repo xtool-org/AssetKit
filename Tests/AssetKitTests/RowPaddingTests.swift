@@ -29,3 +29,15 @@ struct RowPaddingTests {
         }
     }
 }
+
+@Suite("Bitmap pixel mode")
+struct PixelModeTests {
+    @Test("Images are written with alpha (1), app icons as opaque (3)")
+    func pixelMode() {
+        let pixels = [UInt8](repeating: 0, count: 4 * 4 * 4)
+        let image = MLECBody.encode(width: 4, height: 4, pixelsBGRA: pixels, pixelMode: .alpha)
+        let icon = MLECBody.encode(width: 4, height: 4, pixelsBGRA: pixels, pixelMode: .opaque)
+        #expect(Array(image[image.startIndex + 4..<image.startIndex + 12]) == [1, 0, 0, 0, 4, 0, 0, 0])
+        #expect(Array(icon[icon.startIndex + 4..<icon.startIndex + 12]) == [3, 0, 0, 0, 4, 0, 0, 0])
+    }
+}

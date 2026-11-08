@@ -16,7 +16,15 @@ enum CSIWriter {
             .bitmapFlag,
             .bytesPerRow(width: body.width),
         ])
-        let payload = MLECBody.encode(width: body.width, height: body.height, pixelsBGRA: body.pixelsBGRA)
+        // actool writes 1 in the MLEC field after the magic for images and 3
+        // for app icons (see MLECBody). With 3, iOS draws an image's
+        // transparent pixels black.
+        let payload = MLECBody.encode(
+            width: body.width,
+            height: body.height,
+            pixelsBGRA: body.pixelsBGRA,
+            pixelMode: body.kind == .appIcon ? .opaque : .alpha
+        )
 
         // Bit 4 (0x10): generic-image category; set for `.image`, cleared
         // for `.appIcon`. Matches what UIImage(named:) walks for imageset
