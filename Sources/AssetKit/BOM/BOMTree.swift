@@ -64,27 +64,36 @@ struct BOMTree {
             leaf.writeBE(valueBlockIDs[i])
             leaf.writeBE(keyBlockIDs[i])
         }
-        // actool follows the entries with 4 zero bytes and a copy of every
-        // key, in entry order, and sizes the leaf blockSize + the total key
-        // length. App Store Connect looks the app icon up through this copy:
-        // without it the catalog parses but it reports the icons as missing
-        // (ITMS-90022, 90023, 91111).
-        leaf.writeZeros(4)
-        for entry in sorted {
-            leaf.write(entry.key)
+        // BOM trees whose keys all have the same length store them inline:
+        // the header gives that length and actool follows the leaf entries
+        // with 4 zero bytes and a copy of every key, sizing the leaf
+        // blockSize + the total key length. With keys of different lengths
+        // (image names in FACETKEYS, appearance names), the header says
+        // 0xFFFFFFFF and the leaf has no copy. App Store Connect reads keys
+        // through this copy when the length is fixed: without it, or with a
+        // fixed length on keys that differ, it reports the app icon as
+        // missing (ITMS-90022, 90023, 91111).
+        let keyLengths = Set(sorted.map(\.key.count))
+        let fixedKeyLength: Int? = keyLengths.count == 1 ? keyLengths.first : nil
+        if fixedKeyLength != nil {
+            leaf.writeZeros(4)
+            for entry in sorted {
+                leaf.write(entry.key)
+            }
         }
-        let leafSize = Int(blockSize) + sorted.reduce(0) { $0 + $1.key.count }
+        let leafSize = Int(blockSize) + (fixedKeyLength != nil ? sorted.reduce(0) { $0 + $1.key.count } : 0)
         if leaf.offset < leafSize {
             leaf.writeZeros(leafSize - leaf.offset)
         }
         let leafID = bom.addBlock(leaf.data)
 
         // Tree header block, 29 bytes like actool's. After the fixed fields
-        // actool writes the key length as a big-endian u32 (18 for
-        // RENDITIONS, 7 for a FACETKEYS tree holding "AppIcon", 15 for
-        // "UIAppearanceAny"), then 4 zero bytes. App Store Connect never
-        // finishes processing a build whose catalog leaves it at 0: the
-        // upload stays in PROCESSING with no error.
+        // actool writes the key length as a big-endian u32 when all keys
+        // have the same length (18 or 20 for RENDITIONS, 7 for a FACETKEYS
+        // tree holding only "AppIcon"), 0xFFFFFFFF when they differ, then 4
+        // zero bytes. App Store Connect never finishes processing a build
+        // whose catalog leaves it at 0: the upload stays in PROCESSING with
+        // no error.
         var header = ByteWriter()
         header.writeBE(treeMagic)
         header.writeBE(UInt32(1))                   // version
@@ -92,7 +101,7 @@ struct BOMTree {
         header.writeBE(blockSize)
         header.writeBE(UInt32(sorted.count))        // pathCount
         header.write(byte: 0)                       // isPathInternal
-        header.writeBE(UInt32(sorted.map(\.key.count).max() ?? 0)) // key length
+        header.writeBE(fixedKeyLength.map { UInt32($0) } ?? 0xFFFF_FFFF) // key length
         header.writeZeros(4)                        // reserved
         return bom.addBlock(header.data)
     }
