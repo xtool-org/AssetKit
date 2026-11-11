@@ -60,6 +60,10 @@ enum ImageRenderer {
     }
 
     static func appIconRenditions(for appIcon: LoadedAppIcon, files: [IconFile]) throws -> [Rendition] {
+        let pointSizes = Set(files.map(\.pointSize)).sorted()
+        let iconIndices = Dictionary(uniqueKeysWithValues: pointSizes.enumerated().map {
+            ($0.element, UInt16($0.offset + 1))
+        })
         var out: [Rendition] = []
         for file in files {
             let filename = file.sourceURL.lastPathComponent
@@ -87,7 +91,7 @@ enum ImageRenderer {
                 appearance: nil,
                 gamut: .sRGB,
                 filename: filename,
-                kind: .appIcon
+                kind: .appIcon(index: iconIndices[file.pointSize]!)
             )
             out.append(contentsOf: try PNGSource.renditions(bytes: bytes, context: ctx))
         }

@@ -10,7 +10,7 @@ struct CSIWriterTests {
             width: 60, height: 60,
             pixelsBGRA: [UInt8](repeating: 0, count: 60 * 60 * 4),
             colorSpaceID: 1,
-            kind: .appIcon,
+            kind: .appIcon(index: 1),
             renditionName: "icon@2x.png"
         )
         let data = CSIWriter.bitmap(name: "AppIcon", body: body, scaleFactor: 200)

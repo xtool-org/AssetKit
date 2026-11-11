@@ -69,6 +69,7 @@ struct AssetutilParseTests {
         for (i, rendition) in renditions.enumerated() {
             #expect(rendition["Idiom"] as? String == "phone", "rendition[\(i)] idiom")
             #expect(rendition["Name"] as? String == "AppIcon", "rendition[\(i)] name")
+            #expect(rendition["Icon Index"] as? Int == 1, "rendition[\(i)] icon index")
             #expect(rendition["Encoding"] as? String == "ARGB", "rendition[\(i)] encoding")
             #expect(rendition["BitsPerComponent"] as? Int == 8, "rendition[\(i)] BitsPerComponent")
             #expect(rendition["ColorModel"] as? String == "RGB", "rendition[\(i)] ColorModel")
@@ -83,6 +84,34 @@ struct AssetutilParseTests {
         #expect(threeX?["PixelWidth"] as? Int == 180)
         #expect(threeX?["PixelHeight"] as? Int == 180)
         #expect(threeX?["RenditionName"] as? String == "icon@3x.png")
+    }
+
+    @Test(
+        "assetutil reports distinct icon indices for multiple logical sizes",
+        .enabled(if: ProcessLauncher.isAvailable)
+    )
+    func parsesMultipleIconSizes() async throws {
+        let scratch = FileManager.default.temporaryDirectory
+            .appendingPathComponent("xcasset-icons-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let catalog = scratch.appendingPathComponent("Test.xcassets", isDirectory: true)
+        try MultiSizeAppIconFixture.write(to: catalog)
+        let result = try await XCAssetCompiler(deploymentTarget: "17.0").compile(catalog: catalog)
+        let carURL = scratch.appendingPathComponent("Assets.car")
+        try result.carData.write(to: carURL)
+        let invocation = try ProcessLauncher.run(
+            executable: "/usr/bin/xcrun", arguments: ["assetutil", "--info", carURL.path]
+        )
+        #expect(invocation.exitCode == 0, "assetutil stderr: \(String(decoding: invocation.stderr, as: UTF8.self))")
+        let entries = try #require(JSONSerialization.jsonObject(with: invocation.stdout) as? [[String: Any]])
+        let icons = entries.filter { $0["AssetType"] as? String == "Icon Image" }
+        #expect(icons.count == MultiSizeAppIconFixture.entries.count)
+        for icon in icons {
+            let width = try #require(icon["PixelWidth"] as? Double)
+            let scale = try #require(icon["Scale"] as? Double)
+            let expected = try #require(MultiSizeAppIconFixture.indices[width / scale])
+            #expect(icon["Icon Index"] as? Int == Int(expected))
+        }
     }
 
     private func assertHeader(_ header: [String: Any]?) throws {

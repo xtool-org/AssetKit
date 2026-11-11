@@ -49,12 +49,10 @@ struct RenditionKey: Hashable, Sendable {
         case .bitmap(let body):
             self.element = Element.bitmap.rawValue
             switch body.kind {
-            case .appIcon:
+            case .appIcon(let index):
                 self.part = Part.appIcon.rawValue
-                // Dimension2 is the appicon "Icon Index" slot. v1 only
-                // emits one logical icon size per appiconset, so this is
-                // always 1.
-                self.dimension2 = 1
+                // Dimension2 is the appicon "Icon Index" slot.
+                self.dimension2 = index
             case .image:
                 self.part = Part.image.rawValue
                 // Generic image assets don't use Dimension2 at all.
