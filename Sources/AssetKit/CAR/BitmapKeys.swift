@@ -133,7 +133,7 @@ enum BitmapKeys {
     /// (say) preserved JPG would be misclassified as `.image` here.
     private static func inferKind(from renditions: [Rendition]) -> Descriptor.Kind {
         for rendition in renditions {
-            if case .bitmap(let body) = rendition.body, body.kind == .appIcon {
+            if case .bitmap(let body) = rendition.body, case .appIcon = body.kind {
                 return .appIcon
             }
         }

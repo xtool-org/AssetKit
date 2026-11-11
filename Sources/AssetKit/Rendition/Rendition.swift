@@ -21,9 +21,10 @@ struct BitmapBody: Sendable {
     /// value -- actool picks different codes for appicons vs. generic images,
     /// and UIImage(named:) only finds renditions whose part matches the
     /// expected category for the lookup path.
-    enum Kind: Sendable {
+    enum Kind: Sendable, Equatable {
         /// `element=85, part=220`. Used by SpringBoard's icon-render pipeline.
-        case appIcon
+        /// The index distinguishes logical point sizes across scales and idioms.
+        case appIcon(index: UInt16)
         /// `element=85, part=181`. Used by UIImage(named:) for generic image
         /// assets from an `.imageset`.
         case image
