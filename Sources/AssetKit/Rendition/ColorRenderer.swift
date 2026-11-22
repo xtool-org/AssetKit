@@ -4,7 +4,7 @@ enum ColorRenderer {
     static func renditions(for set: LoadedColorSet) throws -> [Rendition] {
         var out: [Rendition] = []
         for entry in set.contents.colors {
-            let (r, g, b, a) = try entry.color.components.asDoubles()
+            let body = ColorBody(components: try entry.color.values(), colorSpaceID: try entry.color.colorSpaceID())
             let gamut: Gamut = {
                 if let declared = entry.displayGamut { return declared }
                 switch entry.color.colorSpace {
@@ -19,10 +19,7 @@ enum ColorRenderer {
                 scale: nil,
                 appearance: appearance,
                 gamut: gamut,
-                body: .color(ColorBody(
-                    red: r, green: g, blue: b, alpha: a,
-                    colorSpaceID: gamut.colorSpaceID
-                ))
+                body: .color(body)
             ))
         }
         return out

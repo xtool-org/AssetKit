@@ -6,6 +6,7 @@ public enum XCAssetCompilerError: Error, Sendable, Equatable {
     case missingReferencedFile(asset: String, filename: String)
     case scaleFileMissing(asset: String, scale: String)
     case invalidColorComponent(String)
+    case unsupportedColorSpace(String)
     case unsupportedGamut(String)
     case multipleAppIconSets([String])
     case appIconSetInNamespace(String)
@@ -31,6 +32,8 @@ extension XCAssetCompilerError: CustomStringConvertible {
             return "Asset '\(asset)' declares scale \(scale) but no file is present for it"
         case .invalidColorComponent(let s):
             return "Invalid color component: '\(s)'"
+        case .unsupportedColorSpace(let s):
+            return "Unsupported color-space: '\(s)'"
         case .unsupportedGamut(let g):
             return "Unsupported display-gamut: '\(g)' (expected sRGB or display-P3)"
         case .appIconSetInNamespace(let name):

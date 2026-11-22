@@ -156,28 +156,51 @@ struct ColorSetContents: Codable, Sendable {
             case components
         }
 
-        struct Components: Codable, Sendable {
-            var red: String
-            var green: String
-            var blue: String
-            var alpha: String
+        static let colorSpaceIDs: [String: UInt32] = [
+            "srgb": 1,
+            "gray-gamma-22": 2,
+            "display-p3": 3,
+            "extended-srgb": 4,
+            "extended-linear-srgb": 5,
+            "extended-gray": 6,
+        ]
 
-            func asDoubles() throws -> (r: Double, g: Double, b: Double, a: Double) {
-                func parse(_ s: String) throws -> Double {
-                    if s.hasPrefix("0x") || s.hasPrefix("0X") {
-                        let hex = String(s.dropFirst(2))
-                        guard let n = UInt8(hex, radix: 16) else {
-                            throw XCAssetCompilerError.invalidColorComponent(s)
-                        }
-                        return Double(n) / 255
-                    }
-                    guard let n = Double(s) else {
+        func colorSpaceID() throws -> UInt32 {
+            guard let id = Self.colorSpaceIDs[colorSpace] else {
+                throw XCAssetCompilerError.unsupportedColorSpace(colorSpace)
+            }
+            return id
+        }
+
+        func values() throws -> [Double] {
+            func parse(_ s: String?, _ name: String) throws -> Double {
+                guard let s else { throw XCAssetCompilerError.invalidColorComponent("missing \(name)") }
+                if s.hasPrefix("0x") || s.hasPrefix("0X") {
+                    guard let n = UInt8(s.dropFirst(2), radix: 16) else {
                         throw XCAssetCompilerError.invalidColorComponent(s)
                     }
-                    return n > 1 ? n / 255 : n
+                    return Double(n) / 255
                 }
-                return (try parse(red), try parse(green), try parse(blue), try parse(alpha))
+                if s.contains(".") {
+                    guard let n = Double(s) else { throw XCAssetCompilerError.invalidColorComponent(s) }
+                    return n
+                }
+                guard let n = Int(s) else { throw XCAssetCompilerError.invalidColorComponent(s) }
+                return Double(n) / 255
             }
+            let c = components
+            if ["gray-gamma-22", "extended-gray"].contains(colorSpace) {
+                return [try parse(c.white, "white"), try parse(c.alpha, "alpha")]
+            }
+            return [try parse(c.red, "red"), try parse(c.green, "green"), try parse(c.blue, "blue"), try parse(c.alpha, "alpha")]
+        }
+
+        struct Components: Codable, Sendable {
+            var red: String?
+            var green: String?
+            var blue: String?
+            var white: String?
+            var alpha: String?
         }
     }
 

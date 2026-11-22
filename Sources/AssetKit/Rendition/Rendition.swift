@@ -47,11 +47,8 @@ struct BitmapBody: Sendable {
 }
 
 struct ColorBody: Sendable {
-    var red: Double
-    var green: Double
-    var blue: Double
-    var alpha: Double
-    var colorSpaceID: UInt8
+    var components: [Double]
+    var colorSpaceID: UInt32
 }
 
 /// Source file kept verbatim inside a DWAR envelope rather than rasterised

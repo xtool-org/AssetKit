@@ -34,10 +34,7 @@ struct ColorRendererTests {
             Issue.record("expected color body")
             return
         }
-        #expect(abs(body.red - 0.5) < 1e-9)
-        #expect(abs(body.green - 0.25) < 1e-9)
-        #expect(abs(body.blue - 0.75) < 1e-9)
-        #expect(abs(body.alpha - 1) < 1e-9)
+        #expect(body.components == [0.5, 0.25, 0.75, 1])
         #expect(body.colorSpaceID == 1)
     }
 
@@ -69,7 +66,7 @@ struct ColorRendererTests {
             Issue.record("expected color body")
             return
         }
-        #expect(body.colorSpaceID == 2)
+        #expect(body.colorSpaceID == 3)
     }
 
     @Test("Parses 0x-prefixed hex components")
@@ -97,8 +94,30 @@ struct ColorRendererTests {
             Issue.record("expected color body")
             return
         }
-        #expect(abs(body.red - 1) < 1e-9)
-        #expect(abs(body.green - 0) < 1e-9)
-        #expect(abs(body.blue - 128 / 255) < 1e-9)
+        #expect(body.components == [1, 0, 128.0 / 255, 1])
+    }
+
+    @Test("Reads gray as white and alpha, decimals as is and integers over 255")
+    func parsesGrayAndIntegers() throws {
+        func body(_ colorSpace: String, _ components: String) throws -> ColorBody {
+            let json = """
+            {
+              "info": { "version": 1, "author": "xcode" },
+              "colors": [
+                { "idiom": "universal", "color": { "color-space": "\(colorSpace)", "components": { \(components) } } }
+              ]
+            }
+            """
+            let contents = try JSONDecoder().decode(ColorSetContents.self, from: Data(json.utf8))
+            let set = LoadedColorSet(name: "C", directory: URL(fileURLWithPath: "/"), contents: contents)
+            guard case .color(let body) = try ColorRenderer.renditions(for: set)[0].body else {
+                throw XCAssetCompilerError.invalidColorComponent("expected color body")
+            }
+            return body
+        }
+        let gray = try body("gray-gamma-22", #""white": "0.500", "alpha": "1.000""#)
+        #expect(gray.components == [0.5, 1])
+        let extended = try body("extended-srgb", #""red": "1", "green": "255", "blue": "1.2", "alpha": "1""#)
+        #expect(extended.components == [1.0 / 255, 1, 1.2, 1.0 / 255])
     }
 }
