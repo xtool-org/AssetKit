@@ -85,6 +85,17 @@ struct CatalogContents: Codable, Sendable {
     var info: Info
 }
 
+struct FolderContents: Codable, Sendable {
+    struct Properties: Codable, Sendable {
+        var providesNamespace: Bool?
+
+        enum CodingKeys: String, CodingKey {
+            case providesNamespace = "provides-namespace"
+        }
+    }
+    var properties: Properties?
+}
+
 struct ImageSetContents: Codable, Sendable {
     struct Image: Codable, Sendable {
         var idiom: Idiom

@@ -41,9 +41,9 @@ struct CatalogLoader: Sendable {
         var colorSets: [LoadedColorSet] = []
         var appIcons: [LoadedAppIcon] = []
 
-        try walk(url, fileManager: fm) { entry in
+        try walk(url, namespace: "", fileManager: fm, decoder: decoder) { entry, namespace in
             let ext = entry.pathExtension
-            let name = entry.deletingPathExtension().lastPathComponent
+            let name = namespace + entry.deletingPathExtension().lastPathComponent
             switch ext {
             case "imageset":
                 let contents = try decode(ImageSetContents.self, at: entry, decoder: decoder)
@@ -52,6 +52,7 @@ struct CatalogLoader: Sendable {
                 let contents = try decode(ColorSetContents.self, at: entry, decoder: decoder)
                 colorSets.append(LoadedColorSet(name: name, directory: entry, contents: contents))
             case "appiconset":
+                guard namespace.isEmpty else { throw XCAssetCompilerError.appIconSetInNamespace(name) }
                 let contents = try decode(AppIconContents.self, at: entry, decoder: decoder)
                 appIcons.append(LoadedAppIcon(name: name, directory: entry, contents: contents))
             default:
@@ -91,16 +92,31 @@ struct CatalogLoader: Sendable {
         }
     }
 
-    private func walk(_ root: URL, fileManager fm: FileManager, visit: (URL) throws -> Void) throws {
+    private func walk(
+        _ root: URL,
+        namespace: String,
+        fileManager fm: FileManager,
+        decoder: JSONDecoder,
+        visit: (URL, String) throws -> Void
+    ) throws {
         let children = try fm.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey])
         for child in children {
             let values = try child.resourceValues(forKeys: [.isDirectoryKey])
             guard values.isDirectory == true else { continue }
             let ext = child.pathExtension
             if ["imageset", "colorset", "appiconset"].contains(ext) {
-                try visit(child)
+                try visit(child, namespace)
             } else {
-                try walk(child, fileManager: fm, visit: visit)
+                let hasContents = fm.fileExists(atPath: child.appendingPathComponent("Contents.json").path)
+                let folder = hasContents ? try decode(FolderContents.self, at: child, decoder: decoder) : nil
+                let providesNamespace = folder?.properties?.providesNamespace == true
+                try walk(
+                    child,
+                    namespace: providesNamespace ? namespace + child.lastPathComponent + "/" : namespace,
+                    fileManager: fm,
+                    decoder: decoder,
+                    visit: visit
+                )
             }
         }
     }

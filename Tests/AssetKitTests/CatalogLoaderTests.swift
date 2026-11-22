@@ -49,4 +49,34 @@ struct CatalogLoaderTests {
         #expect(loaded.colorSets.isEmpty)
         #expect(loaded.appIcon == nil)
     }
+
+    @Test("Prefixes names inside provides-namespace folders with the folder path")
+    func namespaces() async throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ns-\(UUID().uuidString).xcassets", isDirectory: true)
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let info = #""info": { "version": 1, "author": "xcode" }"#
+        let namespace = "{ \(info), \"properties\": { \"provides-namespace\": true } }"
+        let folders = [
+            "Icons": namespace,
+            "Icons/Small": namespace,
+            "Icons/Plain": "{ \(info) }",
+            "Loose": "{ \(info) }",
+        ]
+        try Data("{ \(info) }".utf8).write(to: tmp.appendingPathComponent("Contents.json"))
+        for (path, contents) in folders {
+            let dir = tmp.appendingPathComponent(path, isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try Data(contents.utf8).write(to: dir.appendingPathComponent("Contents.json"))
+        }
+        for path in ["Top", "Icons/Star", "Icons/Small/Dot", "Icons/Plain/Square", "Loose/Circle"] {
+            let dir = tmp.appendingPathComponent(path + ".colorset", isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try Data("{ \"colors\": [], \(info) }".utf8).write(to: dir.appendingPathComponent("Contents.json"))
+        }
+
+        let loaded = try await CatalogLoader().load(catalog: tmp)
+        #expect(Set(loaded.colorSets.map(\.name)) == ["Top", "Icons/Star", "Icons/Small/Dot", "Icons/Square", "Circle"])
+    }
 }
