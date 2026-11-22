@@ -58,6 +58,6 @@ struct CSIWriterTests {
         #expect(data.count >= 184 + 4 + 4 + 4 + 4 + 8 * 4)
         let payloadStart = 184
         let magic = data.subdata(in: payloadStart..<(payloadStart + 4))
-        #expect(Array(magic) == Array("COLR".utf8))
+        #expect(Array(magic) == Array("RLOC".utf8))
     }
 }

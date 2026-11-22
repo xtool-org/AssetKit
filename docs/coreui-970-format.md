@@ -58,10 +58,11 @@ CoreUI mixes endianness for its magic words. The following are little-endian mul
 - `CTAR` → on disk: `R`, `A`, `T`, `C`
 - `CTSI` → on disk: `I`, `S`, `T`, `C`
 - `kfmt` → on disk: `t`, `m`, `f`, `k`
+- `COLR`, stored as `R`, `L`, `O`, `C` on disk
 
 These are written in character order (no reversal):
 
-- `MLEC`, `KCBC`, `COLR`, `META`
+- `MLEC`, `KCBC`, `META`
 
 There's no obvious pattern in the source code for which is which; it must be matched against actool's output per block. Mixing this up produces files that look superficially correct in a hex viewer but fail at runtime.
 

@@ -20,8 +20,8 @@ struct RenditionKey: Hashable, Sendable {
     /// CoreUI element IDs that v1 emits. Values dumped from reference
     /// `Assets.car` produced by actool (Xcode 26 / CoreUI 970).
     enum Element: UInt16 {
-        /// Element used by both `.image` (imageset) and `.appIcon` bitmap
-        /// renditions. The category is differentiated by `Part` below.
+        /// Element used by `.image`, `.appIcon` and `.color` renditions. The
+        /// category is differentiated by `Part` below.
         case bitmap = 85
     }
 
@@ -36,6 +36,7 @@ struct RenditionKey: Hashable, Sendable {
         /// rather than `image`; bitmap variants rasterised from the SVG
         /// (which `UIImage(named:)` actually returns) live under `image`.
         case vectorSource = 42
+        case color = 217
     }
 
     init(rendition: Rendition) {
@@ -61,8 +62,9 @@ struct RenditionKey: Hashable, Sendable {
                 self.dimension2 = 0
             }
         case .color:
-            self.element = 0
-            self.part = 0
+            self.element = Element.bitmap.rawValue
+            self.part = Part.color.rawValue
+            self.scale = 1
             self.dimension2 = 0
         case .preservedSource(let body):
             self.element = Element.bitmap.rawValue
