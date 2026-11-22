@@ -89,6 +89,8 @@ The APPEARANCEKEYS tree maps appearance name strings to the numeric IDs that app
 - iOS: `UIAppearanceAny` (0), `UIAppearanceDark` (1)
 - macOS: `NSAppearanceNameAqua` (0), `NSAppearanceNameDarkAqua` (1)
 
+For iOS, actool 27.1 also writes `UIAppearanceHighContrastAny` (2), `UIAppearanceHighContrastDark` (3), `UIAppearanceLight` (4) and `UIAppearanceHighContrastLight` (5) for high-contrast and light variants, each only when a rendition uses it.
+
 Registering only the macOS names produces a catalog where `UIImage(named:)` returns nil at runtime for every asset, even though `assetutil --info` parses cleanly. SpringBoard's appicon path doesn't depend on APPEARANCEKEYS (it falls back to loose PNGs we emit alongside `Assets.car`, see §"SpringBoard fallback" below), which masks the bug for icon-only catalogs.
 
 The `UIAppearanceAny` row (id=0) is always emitted, because every rendition key packs `appearance=0` as the default-variant marker — even in catalogs with no explicit appearance entries. The `UIAppearanceDark` row (id=1) is emitted only when at least one rendition in the catalog declares the dark variant (matches actool's reference: dark-free catalogs omit the row entirely). Each appearance ID is encoded as a single `u16 LE`.

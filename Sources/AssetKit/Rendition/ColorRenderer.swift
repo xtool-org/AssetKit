@@ -12,7 +12,7 @@ enum ColorRenderer {
                 default: return .sRGB
                 }
             }()
-            let appearance = entry.appearances?.first { $0.darkLuminosity }
+            let appearance = Appearance.keyValue(entry.appearances)
             out.append(Rendition(
                 name: set.name,
                 idiom: entry.idiom,

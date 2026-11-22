@@ -85,7 +85,7 @@ struct RenditionKeyTests {
             name: "Svg",
             idiom: .universal,
             scale: .x1,
-            appearance: nil,
+            appearance: 0,
             gamut: nil,
             body: .preservedSource(PreservedSourceBody(
                 format: .svg,
@@ -110,7 +110,7 @@ struct RenditionKeyTests {
             name: "Jpg",
             idiom: .universal,
             scale: .x2,
-            appearance: nil,
+            appearance: 0,
             gamut: nil,
             body: .preservedSource(PreservedSourceBody(
                 format: .jpeg(width: 120, height: 120),

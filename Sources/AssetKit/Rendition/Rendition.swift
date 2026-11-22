@@ -10,7 +10,7 @@ struct Rendition: Sendable {
     var name: String
     var idiom: Idiom
     var scale: Scale?
-    var appearance: Appearance?
+    var appearance: UInt16
     var gamut: Gamut?
     var body: Body
 }

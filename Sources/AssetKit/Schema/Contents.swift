@@ -70,11 +70,19 @@ struct Appearance: Codable, Sendable, Hashable {
     var appearance: String
     var value: String
 
-    var darkLuminosity: Bool {
-        appearance == "luminosity" && value == "dark"
+    static func keyValue(_ appearances: [Appearance]?) -> UInt16 {
+        let appearances = appearances ?? []
+        let luminosity = appearances.first { $0.appearance == "luminosity" }?.value
+        let highContrast = appearances.contains { $0.appearance == "contrast" && $0.value == "high" }
+        switch (luminosity, highContrast) {
+        case ("dark", false): return 1
+        case ("dark", true): return 3
+        case ("light", false): return 4
+        case ("light", true): return 5
+        case (_, true): return 2
+        case (_, false): return 0
+        }
     }
-
-    static let dark = Appearance(appearance: "luminosity", value: "dark")
 }
 
 struct CatalogContents: Codable, Sendable {

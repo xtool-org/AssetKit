@@ -22,7 +22,7 @@ enum PNGSource {
         var assetName: String
         var idiom: Idiom
         var scale: Scale?
-        var appearance: Appearance?
+        var appearance: UInt16
         var gamut: Gamut
         var filename: String
         var kind: BitmapBody.Kind

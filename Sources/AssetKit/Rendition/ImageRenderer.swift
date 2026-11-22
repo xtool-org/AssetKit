@@ -20,7 +20,7 @@ enum ImageRenderer {
                 throw XCAssetCompilerError.unsupportedAssetType(filename)
             }
             let bytes = try Data(contentsOf: src)
-            let appearance = image.appearances?.first { $0.darkLuminosity }
+            let appearance = Appearance.keyValue(image.appearances)
             switch format {
             case .png:
                 let ctx = PNGSource.Context(
@@ -84,7 +84,7 @@ enum ImageRenderer {
                 assetName: appIcon.name,
                 idiom: file.idiom,
                 scale: scale,
-                appearance: nil,
+                appearance: 0,
                 gamut: .sRGB,
                 filename: filename,
                 kind: .appIcon

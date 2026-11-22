@@ -9,7 +9,7 @@ enum SVGSource {
     struct Context {
         var assetName: String
         var idiom: Idiom
-        var appearance: Appearance?
+        var appearance: UInt16
         var filename: String
     }
 

@@ -17,25 +17,24 @@ import Foundation
 /// the catalog's used-appearances set to `entries(used:)`.
 enum AppearanceKeys {
     static let any: UInt16 = 0
-    static let dark: UInt16 = 1
+
+    static let names: [UInt16: String] = [
+        0: "UIAppearanceAny",
+        1: "UIAppearanceDark",
+        2: "UIAppearanceHighContrastAny",
+        3: "UIAppearanceHighContrastDark",
+        4: "UIAppearanceLight",
+        5: "UIAppearanceHighContrastLight",
+    ]
 
     static func entries(used: Set<UInt16>) -> [BOMTree.Entry] {
-        var rows: [BOMTree.Entry] = []
         // `UIAppearanceAny` (id=0) is always present in the reference, even
         // when every rendition has an explicit appearance, because CoreUI
         // packs `appearance=0` as the default-variant marker in rendition
         // keys regardless of whether a dark variant exists.
-        rows.append(BOMTree.Entry(
-            key: Data("UIAppearanceAny".utf8),
-            value: Self.encodeID(any)
-        ))
-        if used.contains(dark) {
-            rows.append(BOMTree.Entry(
-                key: Data("UIAppearanceDark".utf8),
-                value: Self.encodeID(dark)
-            ))
+        used.union([any]).sorted().compactMap { id in
+            names[id].map { BOMTree.Entry(key: Data($0.utf8), value: encodeID(id)) }
         }
-        return rows
     }
 
     private static func encodeID(_ id: UInt16) -> Data {

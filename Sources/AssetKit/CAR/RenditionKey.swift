@@ -40,7 +40,7 @@ struct RenditionKey: Hashable, Sendable {
     }
 
     init(rendition: Rendition) {
-        self.appearance = (rendition.appearance?.darkLuminosity == true) ? 1 : 0
+        self.appearance = rendition.appearance
         self.localization = 0
         self.scale = rendition.scale?.rawValueByte ?? 0
         self.idiom = rendition.idiom.rawValueByte
