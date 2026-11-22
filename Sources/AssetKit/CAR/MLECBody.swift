@@ -5,7 +5,7 @@ import Foundation
 /// Layout verified against actool's reference Assets.car:
 ///
 ///   MLEC magic        4 bytes
-///   compressionType   u32  (0 = raw, 3 = LZFSE)
+///   flags             u32  (bit 1 marks the bitmap opaque)
 ///   bytesPerPixel     u32  (4 for BGRA8)
 ///   chunkCount        u32  (1 or 3)
 ///   then chunkCount * KCBC chunks
@@ -39,7 +39,8 @@ enum MLECBody {
 
         var w = ByteWriter()
         w.writeFourCC("MLEC")
-        w.writeLE(UInt32(3))                    // compressionType = 3 (LZFSE)
+        let opaque = stride(from: 3, to: pixelsBGRA.count, by: 4).allSatisfy { pixelsBGRA[$0] == 255 }
+        w.writeLE(UInt32(opaque ? 3 : 1))
         w.writeLE(UInt32(4))                    // bytesPerPixel (BGRA8 = 4)
         w.writeLE(chunkCount)
 

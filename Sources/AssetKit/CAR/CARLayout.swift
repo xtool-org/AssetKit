@@ -38,11 +38,7 @@ struct CARLayout {
             )
         }
 
-        var usedAppearances: Set<UInt16> = [AppearanceKeys.any]
-        for rendition in renditions where rendition.appearance?.darkLuminosity == true {
-            usedAppearances.insert(AppearanceKeys.dark)
-        }
-        self.usedAppearances = usedAppearances
+        self.usedAppearances = Set(renditions.map(\.appearance)).union([AppearanceKeys.any])
     }
 
     private static func facetKind(for rendition: Rendition) -> FacetKeys.Kind {

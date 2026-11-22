@@ -3,7 +3,7 @@ import Testing
 @testable import AssetKit
 
 /// `risk-key-packing`: rendition key encode/decode round-trip across the
-/// KEYFORMAT attribute space CoreUI 970 expects. The 9-token, 18-byte key
+/// KEYFORMAT attribute space CoreUI 970 expects. The 10-token, 20-byte key
 /// matches actool's output verbatim — see `KeyFormat.swift`.
 @Suite("RenditionKey round-trip")
 struct RenditionKeyTests {
@@ -31,7 +31,7 @@ struct RenditionKeyTests {
                                 part: 220
                             )
                             let data = key.encode()
-                            #expect(data.count == 18)
+                            #expect(data.count == 20)
                             let decoded = RenditionKey.decode(data)
                             #expect(decoded == key)
                         }
@@ -50,15 +50,16 @@ struct RenditionKeyTests {
             idiom: 0x0807,
             subtype: 0x0a09,
             dimension2: 0x0c0b,
-            identifier: 0x0e0d,
-            element: 0x100f,
-            part: 0x1211
+            displayGamut: 0x0e0d,
+            identifier: 0x100f,
+            element: 0x1211,
+            part: 0x1413
         )
         let bytes = [UInt8](key.encode())
         #expect(bytes == [
             0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
             0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
-            0x11, 0x12,
+            0x11, 0x12, 0x13, 0x14,
         ])
     }
 
@@ -85,7 +86,7 @@ struct RenditionKeyTests {
             name: "Svg",
             idiom: .universal,
             scale: .x1,
-            appearance: nil,
+            appearance: 0,
             gamut: nil,
             body: .preservedSource(PreservedSourceBody(
                 format: .svg,
@@ -110,7 +111,7 @@ struct RenditionKeyTests {
             name: "Jpg",
             idiom: .universal,
             scale: .x2,
-            appearance: nil,
+            appearance: 0,
             gamut: nil,
             body: .preservedSource(PreservedSourceBody(
                 format: .jpeg(width: 120, height: 120),
@@ -126,6 +127,24 @@ struct RenditionKeyTests {
         #expect(key.element == 85)
         #expect(key.part == 181)
         #expect(key.dimension2 == 0)
+    }
+
+    @Test("Only a declared display-P3 gamut sets the displayGamut attribute")
+    func displayGamutKey() throws {
+        let json = """
+        {
+          "info": { "version": 1, "author": "xcode" },
+          "colors": [
+            { "idiom": "universal", "color": { "color-space": "display-p3", "components": { "red": "1.0", "green": "0.0", "blue": "0.0", "alpha": "1.0" } } },
+            { "idiom": "universal", "display-gamut": "sRGB", "color": { "color-space": "srgb", "components": { "red": "1.0", "green": "0.0", "blue": "0.0", "alpha": "1.0" } } },
+            { "idiom": "universal", "display-gamut": "display-P3", "color": { "color-space": "display-p3", "components": { "red": "0.0", "green": "1.0", "blue": "0.0", "alpha": "1.0" } } }
+          ]
+        }
+        """
+        let contents = try JSONDecoder().decode(ColorSetContents.self, from: Data(json.utf8))
+        let set = LoadedColorSet(name: "Gamut", directory: URL(fileURLWithPath: "/"), contents: contents)
+        let keys = try ColorRenderer.renditions(for: set).map(RenditionKey.init(rendition:))
+        #expect(keys.map(\.displayGamut) == [0, 0, 1])
     }
 
     @Test("nameHash is stable across calls for the same name")

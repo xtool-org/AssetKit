@@ -1,11 +1,11 @@
 import Foundation
 
-/// Packed rendition key matching `v1KeyFormat` (CoreUI 970, 9 attributes).
+/// Packed rendition key matching `v1KeyFormat` (CoreUI 970, 10 attributes).
 ///
 /// Encoded as a sequence of little-endian `UInt16` tokens, one per attribute,
 /// in the order declared by `KEYFORMAT`. The pair `(attributeID, attributeValue)`
 /// is implicit: the position in the tuple selects which attribute the token
-/// belongs to. Total size is 18 bytes (9 × u16).
+/// belongs to. Total size is 20 bytes (10 u16 tokens).
 struct RenditionKey: Hashable, Sendable {
     var appearance: UInt16
     var localization: UInt16
@@ -13,6 +13,7 @@ struct RenditionKey: Hashable, Sendable {
     var idiom: UInt16
     var subtype: UInt16
     var dimension2: UInt16
+    var displayGamut: UInt16
     var identifier: UInt16
     var element: UInt16
     var part: UInt16
@@ -20,8 +21,8 @@ struct RenditionKey: Hashable, Sendable {
     /// CoreUI element IDs that v1 emits. Values dumped from reference
     /// `Assets.car` produced by actool (Xcode 26 / CoreUI 970).
     enum Element: UInt16 {
-        /// Element used by both `.image` (imageset) and `.appIcon` bitmap
-        /// renditions. The category is differentiated by `Part` below.
+        /// Element used by `.image`, `.appIcon` and `.color` renditions. The
+        /// category is differentiated by `Part` below.
         case bitmap = 85
     }
 
@@ -36,14 +37,16 @@ struct RenditionKey: Hashable, Sendable {
         /// rather than `image`; bitmap variants rasterised from the SVG
         /// (which `UIImage(named:)` actually returns) live under `image`.
         case vectorSource = 42
+        case color = 217
     }
 
     init(rendition: Rendition) {
-        self.appearance = (rendition.appearance?.darkLuminosity == true) ? 1 : 0
+        self.appearance = rendition.appearance
         self.localization = 0
         self.scale = rendition.scale?.rawValueByte ?? 0
         self.idiom = rendition.idiom.rawValueByte
         self.subtype = 0
+        self.displayGamut = rendition.gamut == .displayP3 ? 1 : 0
         self.identifier = UInt16(FacetKeys.nameHash(rendition.name) & 0xFFFF)
         switch rendition.body {
         case .bitmap(let body):
@@ -61,8 +64,9 @@ struct RenditionKey: Hashable, Sendable {
                 self.dimension2 = 0
             }
         case .color:
-            self.element = 0
-            self.part = 0
+            self.element = Element.bitmap.rawValue
+            self.part = Part.color.rawValue
+            self.scale = 1
             self.dimension2 = 0
         case .preservedSource(let body):
             self.element = Element.bitmap.rawValue
@@ -89,6 +93,7 @@ struct RenditionKey: Hashable, Sendable {
         idiom: UInt16 = 0,
         subtype: UInt16 = 0,
         dimension2: UInt16 = 0,
+        displayGamut: UInt16 = 0,
         identifier: UInt16 = 0,
         element: UInt16 = 0,
         part: UInt16 = 0
@@ -99,9 +104,25 @@ struct RenditionKey: Hashable, Sendable {
         self.idiom = idiom
         self.subtype = subtype
         self.dimension2 = dimension2
+        self.displayGamut = displayGamut
         self.identifier = identifier
         self.element = element
         self.part = part
+    }
+
+    func value(for attribute: AttributeID) -> UInt16 {
+        switch attribute {
+        case .appearance: return appearance
+        case .localization: return localization
+        case .scale: return scale
+        case .idiom: return idiom
+        case .subtype: return subtype
+        case .dimension2: return dimension2
+        case .displayGamut: return displayGamut
+        case .identifier: return identifier
+        case .element: return element
+        case .part: return part
+        }
     }
 
     func encode() -> Data {
@@ -112,6 +133,7 @@ struct RenditionKey: Hashable, Sendable {
         w.writeLE(idiom)
         w.writeLE(subtype)
         w.writeLE(dimension2)
+        w.writeLE(displayGamut)
         w.writeLE(identifier)
         w.writeLE(element)
         w.writeLE(part)
@@ -119,7 +141,7 @@ struct RenditionKey: Hashable, Sendable {
     }
 
     static func decode(_ data: Data) -> RenditionKey? {
-        guard data.count == 18 else { return nil }
+        guard data.count == 20 else { return nil }
         func u16(_ offset: Int) -> UInt16 {
             let lo = UInt16(data[data.index(data.startIndex, offsetBy: offset)])
             let hi = UInt16(data[data.index(data.startIndex, offsetBy: offset + 1)])
@@ -132,9 +154,10 @@ struct RenditionKey: Hashable, Sendable {
             idiom: u16(6),
             subtype: u16(8),
             dimension2: u16(10),
-            identifier: u16(12),
-            element: u16(14),
-            part: u16(16)
+            displayGamut: u16(12),
+            identifier: u16(14),
+            element: u16(16),
+            part: u16(18)
         )
     }
 }

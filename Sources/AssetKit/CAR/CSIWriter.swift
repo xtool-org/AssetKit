@@ -120,11 +120,11 @@ enum CSIWriter {
             height: 0,
             scaleFactor: 100,
             pixelFormat: 0,
-            colorSpace: UInt32(body.colorSpaceID),
+            colorSpace: 0,
             layout: .namedColor,
             name: name,
             tvlLength: 0,
-            bitmapCount: 0,
+            bitmapCount: 1,
             renditionLength: UInt32(payload.count)
         )
         return header + payload
@@ -132,11 +132,11 @@ enum CSIWriter {
 
     private static func colorBody(body: ColorBody) -> Data {
         var w = ByteWriter()
-        w.writeFourCC("COLR")
+        w.writeFourCC("RLOC")
         w.writeLE(UInt32(0))                    // version
-        w.writeLE(UInt32(body.colorSpaceID))    // colorSpaceID with flag bits
-        w.writeLE(UInt32(4))                    // numberOfComponents
-        for component in [body.red, body.green, body.blue, body.alpha] {
+        w.writeLE(body.colorSpaceID)
+        w.writeLE(UInt32(body.components.count))
+        for component in body.components {
             w.writeLE(component.bitPattern)
         }
         return w.data

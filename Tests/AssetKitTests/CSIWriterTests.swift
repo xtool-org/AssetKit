@@ -52,12 +52,24 @@ struct CSIWriterTests {
 
     @Test("Color CSI body starts with COLR magic and four IEEE-754 doubles")
     func colorBody() {
-        let body = ColorBody(red: 1, green: 0, blue: 0.5, alpha: 1, colorSpaceID: 0)
+        let body = ColorBody(components: [1, 0, 0.5, 1], colorSpaceID: 1)
         let data = CSIWriter.color(name: "Accent", body: body)
         // CSI header is 184 bytes; body starts at offset 184
         #expect(data.count >= 184 + 4 + 4 + 4 + 4 + 8 * 4)
         let payloadStart = 184
         let magic = data.subdata(in: payloadStart..<(payloadStart + 4))
-        #expect(Array(magic) == Array("COLR".utf8))
+        #expect(Array(magic) == Array("RLOC".utf8))
+    }
+
+    @Test("MLEC flags mark a bitmap opaque only when every pixel's alpha is 255")
+    func mlecOpacity() {
+        func flags(_ alphas: [UInt8]) -> UInt32 {
+            let pixels: [UInt8] = alphas.flatMap { alpha -> [UInt8] in [0, 0, 0, alpha] }
+            let data = MLECBody.encode(width: UInt32(alphas.count), height: 1, pixelsBGRA: pixels)
+            return UInt32(littleEndian: data.subdata(in: 4..<8).withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) })
+        }
+        #expect(flags([255, 255]) == 3)
+        #expect(flags([255, 128]) == 1)
+        #expect(flags([0, 0]) == 1)
     }
 }

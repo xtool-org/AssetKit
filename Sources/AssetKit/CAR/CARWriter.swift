@@ -54,7 +54,7 @@ struct CARWriter: Sendable {
         let extendedMetadataBlockID = bom.addBlock(ExtendedMetadata.data(deploymentTarget: deploymentTarget))
         bom.setVariable("EXTENDED_METADATA", blockID: extendedMetadataBlockID)
 
-        let bitmapAssets: [(name: String, descriptor: BitmapKeys.Descriptor)] =
+        let bitmapAssets: [(name: String, descriptor: Data)] =
             layout.assets.compactMap { asset in
                 guard let descriptor = BitmapKeys.descriptor(
                     forAsset: asset.name,

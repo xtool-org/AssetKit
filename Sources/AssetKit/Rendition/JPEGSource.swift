@@ -9,7 +9,7 @@ enum JPEGSource {
         var assetName: String
         var idiom: Idiom
         var scale: Scale?
-        var appearance: Appearance?
+        var appearance: UInt16
         var filename: String
     }
 

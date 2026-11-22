@@ -10,7 +10,7 @@ struct Rendition: Sendable {
     var name: String
     var idiom: Idiom
     var scale: Scale?
-    var appearance: Appearance?
+    var appearance: UInt16
     var gamut: Gamut?
     var body: Body
 }
@@ -47,11 +47,8 @@ struct BitmapBody: Sendable {
 }
 
 struct ColorBody: Sendable {
-    var red: Double
-    var green: Double
-    var blue: Double
-    var alpha: Double
-    var colorSpaceID: UInt8
+    var components: [Double]
+    var colorSpaceID: UInt32
 }
 
 /// Source file kept verbatim inside a DWAR envelope rather than rasterised
