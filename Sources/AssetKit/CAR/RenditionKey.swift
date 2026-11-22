@@ -106,6 +106,20 @@ struct RenditionKey: Hashable, Sendable {
         self.part = part
     }
 
+    func value(for attribute: AttributeID) -> UInt16 {
+        switch attribute {
+        case .appearance: return appearance
+        case .localization: return localization
+        case .scale: return scale
+        case .idiom: return idiom
+        case .subtype: return subtype
+        case .dimension2: return dimension2
+        case .identifier: return identifier
+        case .element: return element
+        case .part: return part
+        }
+    }
+
     func encode() -> Data {
         var w = ByteWriter()
         w.writeLE(appearance)

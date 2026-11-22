@@ -111,20 +111,11 @@ Structure:
 
 - Tree is `isPathInternal = true` and uses a `blockSize` of 1024.
 - Each leaf entry's "key" slot is an inline `u32` `NameIdentifier` (not a block pointer like other trees).
-- Each value is a 52-byte descriptor.
+- Each value is a descriptor of `4 * (n + 1)` bytes for `n` KEYFORMAT attributes.
 
-The 52-byte descriptor layout was derived by diffing `actool`'s outputs for `.appiconset` vs `.imageset` (bitmap source) vs `.imageset` (vector source) renditions. The first 7 `u32`s are header-like; the only one that varies across kinds is slot 6 (an asset-kind marker: `0x04` for PNG / JPG, `0x0e` for SVG vector sources and for appicons). The remaining 6 fields vary by asset kind:
+The descriptor starts with `(1, 0, byteCount, attributeCount)`, followed by one `u32` per KEYFORMAT attribute in KEYFORMAT order. Appearance, identifier, element and part are `0xFFFFFFFF`. Every other attribute is a mask with bit `1 << value` set for each value the asset's renditions use, so actool 27.1 writes a scale mask of `0x2` for a 1x-only image, `0x4` for a 2x-only image and `0xE` for 1x/2x/3x. A mask that leaves out a scale the asset has makes CoreUI skip that scale's renditions.
 
-| Field | AppIcon | Image (PNG / JPG) | Vector (SVG) |
-|---|---|---|---|
-| `u32` slot 6 (asset-kind marker) | `0x0e` | `0x04` | `0x0e` |
-| `u32` slot 8 | (idiom×subtype count) | (idiom×subtype count) | (idiom×subtype count) |
-| `(u16, u16)` slot 9 | `(1, 1)` | `(1, 0)` | `(1, 0)` |
-| `u32` slot 10 | `7` | `1` | `1` |
-
-Followed by three trailing `0xFFFFFFFF` sentinels. Total: 52 bytes. The Vector template matches the Image template after slot 6 — the marker is the only thing CoreUI uses to route the lookup differently for SVG sources.
-
-The `renditionFlags` field in the CSI header differs correspondingly — bit 4 set for `.image` renditions, bit 2 set for vector renditions, both cleared for `.appIcon`.
+The `renditionFlags` field in the CSI header differs by rendition kind, with bit 4 set for `.image` renditions, bit 2 set for vector renditions, and both cleared for `.appIcon`.
 
 Implementation: [Sources/AssetKit/CAR/BitmapKeys.swift](../Sources/AssetKit/CAR/BitmapKeys.swift).
 
@@ -214,10 +205,7 @@ The TVL section is shaped like the bitmap TVL but with type `1007` (bytes-per-ro
 JPG renditions sit in the generic-image category at every layer above the CSI body, exactly like PNG. SVG vector renditions diverge in two places because CoreUI keys the vector-source slot separately from the bitmap-source slot.
 
 - **FACETKEYS**: `(element=85, part=181)` for all three source formats. The asset-level entry is opaque to source format; one FACETKEYS row per asset name regardless of whether the underlying renditions are PNG, JPG, or SVG.
-- **BITMAPKEYS**:
-  - PNG, JPG → `.image` 52-byte descriptor template (slot 6 asset-kind marker = `0x04`).
-  - SVG → separate `.vector` template (same shape as `.image` after slot 6; marker = `0x0e`).
-  See §6 above for the full descriptor layout.
+- **BITMAPKEYS** descriptors are computed from each asset's renditions the same way for all three source formats (see section 6 above).
 - **RENDITIONS tree key** (per-rendition, 18-byte packed-attribute tuple):
   - PNG, JPG → `(element=85, part=181)`.
   - SVG vector → `(element=85, part=42, scale=1)`. The reference packs every SVG vector rendition into the `scale=1` slot of CoreUI's lookup tree regardless of any `@Nx` in the source filename; encoding `scale=0` here orphans the rendition from CoreUI's scale-keyed lookups even though `assetutil --info` still parses the file cleanly.
