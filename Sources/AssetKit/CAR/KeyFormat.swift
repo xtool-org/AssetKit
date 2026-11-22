@@ -15,6 +15,7 @@ enum AttributeID: UInt32 {
     case idiom = 15
     case subtype = 16
     case identifier = 17
+    case displayGamut = 24
 }
 
 /// Attribute order CoreUI 970 emits in `KEYFORMAT` (and which the rendition key
@@ -28,6 +29,7 @@ let v1KeyFormat: [AttributeID] = [
     .idiom,
     .subtype,
     .dimension2,
+    .displayGamut,
     .identifier,
     .element,
     .part,

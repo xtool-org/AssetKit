@@ -208,7 +208,7 @@ JPG renditions sit in the generic-image category at every layer above the CSI bo
 
 - **FACETKEYS**: `(element=85, part=181)` for all three source formats. The asset-level entry is opaque to source format; one FACETKEYS row per asset name regardless of whether the underlying renditions are PNG, JPG, or SVG.
 - **BITMAPKEYS** descriptors are computed from each asset's renditions the same way for all three source formats (see section 6 above).
-- **RENDITIONS tree key** (per-rendition, 18-byte packed-attribute tuple):
+- **RENDITIONS tree key** (per-rendition, 20-byte packed-attribute tuple):
   - PNG, JPG → `(element=85, part=181)`.
   - SVG vector → `(element=85, part=42, scale=1)`. The reference packs every SVG vector rendition into the `scale=1` slot of CoreUI's lookup tree regardless of any `@Nx` in the source filename; encoding `scale=0` here orphans the rendition from CoreUI's scale-keyed lookups even though `assetutil --info` still parses the file cleanly.
   - For all source formats, the `appearance` slot still carries dark-mode variants.
